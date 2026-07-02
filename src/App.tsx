@@ -25,6 +25,7 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="blogs" element={<BlogsList />} />
               <Route path="categories" element={<Categories />} />
+              <Route path="tags" element={<Tags />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             <Route path="/blogs/new" element={<BlogEditor />} />

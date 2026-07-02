@@ -88,32 +88,50 @@ export const db = {
       return getLocalBlogs();
     }
     try {
-      const { data, error } = await supabase
+      const { data: blogsData, error } = await supabase
         .from("blogs")
         .select(`
           *,
-          categories (
-            name
+          author:users!blogs_author_id_fkey (
+            name,
+            avatar_url
           )
         `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data || []).map((b: any) => ({
-        id: b.id,
-        title: b.title,
-        slug: b.slug,
-        excerpt: b.excerpt || "",
-        content: b.content || "",
-        category: b.categories?.name || b.category || "Engineering",
-        status: b.status || "draft",
-        coverImage: b.cover_image || b.coverImage || "",
-        author: b.author || { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
-        createdAt: b.created_at || b.createdAt,
-        updatedAt: b.updated_at || b.updatedAt,
-        readingTime: b.reading_time ? `${b.reading_time} min` : b.readingTime || "5 min",
-        tags: b.tags || [],
-      }));
+
+      // Fetch all categories and tags to resolve names in memory
+      const { data: allCats } = await supabase.from("categories").select("id, name");
+      const { data: allTags } = await supabase.from("tags").select("id, name");
+
+      return (blogsData || []).map((b: any) => {
+        const categories = (b.category_ids || [])
+          .map((cid: string) => allCats?.find((c) => c.id === cid)?.name)
+          .filter(Boolean);
+
+        const tags = (b.tag_ids || [])
+          .map((tid: string) => allTags?.find((t) => t.id === tid)?.name)
+          .filter(Boolean);
+
+        return {
+          id: b.id,
+          title: b.title,
+          slug: b.slug,
+          excerpt: b.excerpt || "",
+          content: b.content || "",
+          category: categories.length > 0 ? categories : ["Engineering"],
+          status: b.status || "draft",
+          coverImage: b.cover_image || b.coverImage || "",
+          author: b.author ? { name: b.author.name, avatar: b.author.avatar_url } : { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
+          authorId: b.author_id,
+          createdAt: b.created_at || b.createdAt,
+          updatedAt: b.updated_at || b.updatedAt,
+          publishedAt: b.published_at || b.publishedAt,
+          readingTime: b.reading_time ? `${b.reading_time} min` : b.readingTime || "5 min",
+          tags: tags.length > 0 ? tags : (b.tags || []),
+        };
+      });
     } catch (err) {
       console.warn("Supabase fetch failed, falling back to local storage:", err);
       return getLocalBlogs();
@@ -129,8 +147,9 @@ export const db = {
         .from("blogs")
         .select(`
           *,
-          categories (
-            name
+          author:users!blogs_author_id_fkey (
+            name,
+            avatar_url
           )
         `)
         .eq("id", id)
@@ -139,18 +158,16 @@ export const db = {
       if (error) throw error;
       if (!data) return null;
 
-      // Fetch Tags
-      const { data: tagData } = await supabase
-        .from("blog_tags")
-        .select(`
-          tags (
-            name
-          )
-        `)
-        .eq("blog_id", id);
+      // Fetch all categories and tags to resolve names
+      const { data: allCats } = await supabase.from("categories").select("id, name");
+      const { data: allTags } = await supabase.from("tags").select("id, name");
 
-      const tags = (tagData || [])
-        .map((t: any) => t.tags?.name)
+      const categories = (data.category_ids || [])
+        .map((cid: string) => allCats?.find((c) => c.id === cid)?.name)
+        .filter(Boolean);
+
+      const tags = (data.tag_ids || [])
+        .map((tid: string) => allTags?.find((t) => t.id === tid)?.name)
         .filter(Boolean);
 
       return {
@@ -159,12 +176,14 @@ export const db = {
         slug: data.slug,
         excerpt: data.excerpt || "",
         content: data.content || "",
-        category: data.categories?.name || data.category || "Engineering",
+        category: categories.length > 0 ? categories : ["Engineering"],
         status: data.status || "draft",
         coverImage: data.cover_image || data.coverImage || "",
-        author: data.author || { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
+        author: data.author ? { name: data.author.name, avatar: data.author.avatar_url } : { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
+        authorId: data.author_id,
         createdAt: data.created_at || data.createdAt,
         updatedAt: data.updated_at || data.updatedAt,
+        publishedAt: data.published_at || data.publishedAt,
         readingTime: data.reading_time ? `${data.reading_time} min` : data.readingTime || "5 min",
         tags: tags.length > 0 ? tags : (data.tags || []),
       };
@@ -186,16 +205,46 @@ export const db = {
       return newBlog;
     }
     try {
-      // Find category ID
-      let categoryId = null;
-      const { data: catData } = await supabase
-        .from("categories")
-        .select("id")
-        .ilike("name", blog.category)
-        .maybeSingle();
-      
-      if (catData) {
-        categoryId = catData.id;
+      // Find category IDs (for array column category_ids)
+      const categoryNames = Array.isArray(blog.category)
+        ? blog.category
+        : (typeof blog.category === 'string' ? blog.category.split(",").map(c => c.trim()).filter(Boolean) : [blog.category].filter(Boolean));
+
+      const categoryIds: string[] = [];
+      for (const catName of categoryNames) {
+        const { data: catData } = await supabase
+          .from("categories")
+          .select("id")
+          .ilike("name", catName)
+          .maybeSingle();
+        if (catData) categoryIds.push(catData.id);
+      }
+
+      // Find or create tags (for array column tag_ids)
+      const tagsArray = Array.isArray(blog.tags)
+        ? blog.tags
+        : (typeof (blog.tags as any) === 'string' ? (blog.tags as any).split(",").map((t: string) => t.trim()).filter(Boolean) : []);
+
+      const tagIds: string[] = [];
+      for (const tagName of tagsArray) {
+        let tagId = null;
+        const { data: tagRecord } = await supabase
+          .from("tags")
+          .select("id")
+          .ilike("name", tagName)
+          .maybeSingle();
+
+        if (tagRecord) {
+          tagId = tagRecord.id;
+        } else {
+          const { data: newTag } = await supabase
+            .from("tags")
+            .insert({ name: tagName, slug: tagName.toLowerCase().replace(/[^a-z0-9]+/g, "-") })
+            .select("id")
+            .maybeSingle();
+          if (newTag) tagId = newTag.id;
+        }
+        if (tagId) tagIds.push(tagId);
       }
 
       const dbBlog = {
@@ -203,10 +252,13 @@ export const db = {
         slug: blog.slug || blog.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         excerpt: blog.excerpt,
         content: blog.content,
-        category_id: categoryId,
+        category_ids: categoryIds,
+        tag_ids: tagIds,
         status: blog.status,
+        author_id: blog.authorId || null,
         cover_image: blog.coverImage,
         reading_time: typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : (blog.readingTime || 5),
+        published_at: blog.status === "published" ? new Date().toISOString() : null,
       };
 
       const { data, error } = await supabase
@@ -216,37 +268,6 @@ export const db = {
         .single();
 
       if (error) throw error;
-
-      // Handle tags relations
-      if (blog.tags && blog.tags.length > 0) {
-        for (const tagName of blog.tags) {
-          // Find or create tag
-          let tagId = null;
-          const { data: tagRecord } = await supabase
-            .from("tags")
-            .select("id")
-            .ilike("name", tagName)
-            .maybeSingle();
-
-          if (tagRecord) {
-            tagId = tagRecord.id;
-          } else {
-            const { data: newTag } = await supabase
-              .from("tags")
-              .insert({ name: tagName, slug: tagName.toLowerCase().replace(/[^a-z0-9]+/g, "-") })
-              .select("id")
-              .maybeSingle();
-            if (newTag) tagId = newTag.id;
-          }
-
-          if (tagId && data.id) {
-            await supabase.from("blog_tags").insert({
-              blog_id: data.id,
-              tag_id: tagId,
-            });
-          }
-        }
-      }
 
       return {
         ...blog,
@@ -276,39 +297,31 @@ export const db = {
       return;
     }
     try {
-      let categoryId = undefined;
-      if (blog.category) {
-        const { data: catData } = await supabase
-          .from("categories")
-          .select("id")
-          .ilike("name", blog.category)
-          .maybeSingle();
-        if (catData) categoryId = catData.id;
+      let categoryIds = undefined;
+      if (blog.category !== undefined) {
+        const categoryNames = Array.isArray(blog.category)
+          ? blog.category
+          : (typeof blog.category === 'string' ? blog.category.split(",").map(c => c.trim()).filter(Boolean) : [blog.category].filter(Boolean));
+
+        categoryIds = [];
+        for (const catName of categoryNames) {
+          const { data: catData } = await supabase
+            .from("categories")
+            .select("id")
+            .ilike("name", catName)
+            .maybeSingle();
+          if (catData) categoryIds.push(catData.id);
+        }
       }
 
-      const updateData: any = {};
-      if (blog.title !== undefined) updateData.title = blog.title;
-      if (blog.slug !== undefined) updateData.slug = blog.slug;
-      if (blog.excerpt !== undefined) updateData.excerpt = blog.excerpt;
-      if (blog.content !== undefined) updateData.content = blog.content;
-      if (categoryId !== undefined) updateData.category_id = categoryId;
-      if (blog.status !== undefined) updateData.status = blog.status;
-      if (blog.coverImage !== undefined) updateData.cover_image = blog.coverImage;
-      if (blog.readingTime !== undefined) updateData.reading_time = typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : blog.readingTime;
-
-      const { error } = await supabase
-        .from("blogs")
-        .update(updateData)
-        .eq("id", id);
-
-      if (error) throw error;
-
-      // Update blog_tags relation
+      let tagIds = undefined;
       if (blog.tags !== undefined) {
-        // Clear existing tags
-        await supabase.from("blog_tags").delete().eq("blog_id", id);
+        const tagsArray = Array.isArray(blog.tags)
+          ? blog.tags
+          : (typeof (blog.tags as any) === 'string' ? (blog.tags as any).split(",").map((t: string) => t.trim()).filter(Boolean) : []);
 
-        for (const tagName of blog.tags) {
+        tagIds = [];
+        for (const tagName of tagsArray) {
           let tagId = null;
           const { data: tagRecord } = await supabase
             .from("tags")
@@ -326,15 +339,35 @@ export const db = {
               .maybeSingle();
             if (newTag) tagId = newTag.id;
           }
-
-          if (tagId) {
-            await supabase.from("blog_tags").insert({
-              blog_id: id,
-              tag_id: tagId,
-            });
-          }
+          if (tagId) tagIds.push(tagId);
         }
       }
+
+      const updateData: any = {};
+      if (blog.title !== undefined) updateData.title = blog.title;
+      if (blog.slug !== undefined) updateData.slug = blog.slug;
+      if (blog.excerpt !== undefined) updateData.excerpt = blog.excerpt;
+      if (blog.content !== undefined) updateData.content = blog.content;
+      if (categoryIds !== undefined) updateData.category_ids = categoryIds;
+      if (tagIds !== undefined) updateData.tag_ids = tagIds;
+      if (blog.authorId !== undefined) updateData.author_id = blog.authorId;
+      if (blog.status !== undefined) {
+        updateData.status = blog.status;
+        if (blog.status === "published") {
+          updateData.published_at = new Date().toISOString();
+        } else if (blog.status === "draft") {
+          updateData.published_at = null;
+        }
+      }
+      if (blog.coverImage !== undefined) updateData.cover_image = blog.coverImage;
+      if (blog.readingTime !== undefined) updateData.reading_time = typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : blog.readingTime;
+
+      const { error } = await supabase
+        .from("blogs")
+        .update(updateData)
+        .eq("id", id);
+
+      if (error) throw error;
     } catch (err) {
       console.warn("Supabase update failed, using local fallback:", err);
       const list = getLocalBlogs();
@@ -354,6 +387,20 @@ export const db = {
       return;
     }
     try {
+      const { data: blogData } = await supabase
+        .from("blogs")
+        .select("cover_image")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (blogData?.cover_image) {
+        const cleanCoverImage = blogData.cover_image.split("?")[0];
+        const parts = cleanCoverImage.split("blog-images/");
+        const filePath = parts.length > 1 ? parts[1] : cleanCoverImage;
+        
+        await supabase.storage.from("blog-images").remove([filePath]);
+      }
+
       const { error } = await supabase.from("blogs").delete().eq("id", id);
       if (error) throw error;
     } catch (err) {
@@ -370,25 +417,30 @@ export const db = {
       return getLocalCategories();
     }
     try {
-      const { data, error } = await supabase
+      const { data: catData, error } = await supabase
         .from("categories")
-        .select(`
-          *,
-          blogs (
-            id
-          )
-        `)
+        .select("*")
         .order("name");
 
       if (error) throw error;
 
-      return (data || []).map((cat: any) => ({
-        id: cat.id,
-        name: cat.name,
-        slug: cat.slug,
-        totalBlogs: cat.blogs?.length || 0,
-        createdAt: cat.created_at || cat.createdAt,
-      }));
+      const { data: blogsData } = await supabase
+        .from("blogs")
+        .select("category_ids");
+
+      return (catData || []).map((cat: any) => {
+        const totalBlogs = (blogsData || []).filter((b: any) =>
+          (b.category_ids || []).includes(cat.id)
+        ).length;
+
+        return {
+          id: cat.id,
+          name: cat.name,
+          slug: cat.slug,
+          totalBlogs,
+          createdAt: cat.created_at || cat.createdAt,
+        };
+      });
     } catch (err) {
       console.warn("Supabase categories fetch failed, falling back:", err);
       return getLocalCategories();
@@ -556,23 +608,29 @@ export const db = {
       return getLocalTags();
     }
     try {
-      const { data, error } = await supabase
+      const { data: tagData, error } = await supabase
         .from("tags")
-        .select(`
-          *,
-          blog_tags (
-            blog_id
-          )
-        `)
+        .select("*")
         .order("name");
       if (error) throw error;
-      return (data || []).map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        totalBlogs: t.blog_tags?.length || 0,
-        createdAt: t.created_at || t.createdAt,
-      }));
+
+      const { data: blogsData } = await supabase
+        .from("blogs")
+        .select("tag_ids");
+
+      return (tagData || []).map((t: any) => {
+        const totalBlogs = (blogsData || []).filter((b: any) =>
+          (b.tag_ids || []).includes(t.id)
+        ).length;
+
+        return {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          totalBlogs,
+          createdAt: t.created_at || t.createdAt,
+        };
+      });
     } catch (err) {
       console.warn("Supabase detailed tags fetch failed, using local fallback:", err);
       return getLocalTags();

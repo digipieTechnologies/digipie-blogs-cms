@@ -4,15 +4,17 @@ export interface Blog {
   slug: string;
   excerpt: string;
   content: any;
-  category: string;
+  category: string | string[];
   status: 'draft' | 'published' | 'archived';
   coverImage: string;
   author: {
     name: string;
     avatar: string;
   };
+  authorId?: string;
   createdAt: string;
   updatedAt: string;
+  publishedAt?: string;
   readingTime: string;
   tags: string[];
 }

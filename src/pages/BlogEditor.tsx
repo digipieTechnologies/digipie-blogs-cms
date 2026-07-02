@@ -32,6 +32,7 @@ import { MultiDropdown } from "@/components/ui/MultiDropdown";
 import { useBlog, useCreateBlog, useUpdateBlog } from "@/hooks/useBlogs";
 import { useCategories, useCreateCategory } from "@/hooks/useCategories";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   getBlogImageUrl,
@@ -126,6 +127,7 @@ export function BlogEditor() {
   const navigate = useNavigate();
   const isEditing = !!id && id !== "new";
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [title, setTitle] = useState("");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -243,6 +245,21 @@ export function BlogEditor() {
     input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
       if (file) {
+        const updateTitleFromFileName = (fileName: string) => {
+          const originalName = fileName.split(".").slice(0, -1).join(".");
+          const cleanTitleName = originalName
+            .replace(/[-_]+/g, " ")
+            .trim()
+            .split(/\s+/)
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+
+          if (!title.trim()) {
+            setTitle(cleanTitleName);
+            setSlug(originalName.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+          }
+        };
+
         const isSupabaseConfigured = () => {
           const url = import.meta.env.VITE_SUPABASE_URL || "";
           const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -257,7 +274,20 @@ export function BlogEditor() {
         if (isSupabaseConfigured()) {
           try {
             const fileExt = file.name.split(".").pop();
-            const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+            const originalFileName = file.name
+              .split(".")
+              .slice(0, -1)
+              .join(".");
+            const baseName =
+              slug.trim() ||
+              title
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-") ||
+              originalFileName.toLowerCase().replace(/[^a-z0-9]+/g, "-") ||
+              "blog-cover";
+            const cleanBaseName = baseName.replace(/(^-|-$)/g, "");
+            const fileName = `${cleanBaseName}.${fileExt}`;
             const filePath = `covers/${fileName}`;
 
             const { data, error } = await supabase.storage
@@ -269,7 +299,12 @@ export function BlogEditor() {
 
             if (error) throw error;
 
-            setCoverImage(filePath);
+            const { data: urlData } = supabase.storage
+              .from("blog-images")
+              .getPublicUrl(filePath);
+            const cleanUrl = urlData.publicUrl.split("?")[0];
+            setCoverImage(`${cleanUrl}?t=${Date.now()}`);
+            updateTitleFromFileName(file.name);
             return;
           } catch (err) {
             console.warn(
@@ -282,6 +317,7 @@ export function BlogEditor() {
         const reader = new FileReader();
         reader.onload = (event) => {
           setCoverImage(event.target?.result as string);
+          updateTitleFromFileName(file.name);
         };
         reader.readAsDataURL(file);
       }
@@ -294,7 +330,10 @@ export function BlogEditor() {
       setTitle(fetchedBlog.title);
       setContent(convertContentToHtml(fetchedBlog.content));
       setCoverImage(fetchedBlog.coverImage || "");
-      setCategory(fetchedBlog.category.toLowerCase());
+      const categoryVal = Array.isArray(fetchedBlog.category)
+        ? fetchedBlog.category.join(", ")
+        : fetchedBlog.category || "";
+      setCategory(categoryVal);
       setSlug(fetchedBlog.slug);
       setExcerpt(fetchedBlog.excerpt);
       setTagsString(fetchedBlog.tags?.join(", ") || "");
@@ -354,22 +393,37 @@ export function BlogEditor() {
       const mimeType =
         imageSrc.split(",")[0].match(/:(.*?);/)?.[1] || "image/png";
       const fileExt = mimeType.split("/")[1] || "png";
-      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+
+      const baseName =
+        slug.trim() ||
+        title
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-") ||
+        "blog-cover";
+      const cleanBaseName = baseName.replace(/(^-|-$)/g, "");
+      const fileName = `${cleanBaseName}.${fileExt}`;
       const filePath = `covers/${fileName}`;
 
       const response = await fetch(imageSrc);
       const blob = await response.blob();
-      const file = new File([blob], fileName, { type: mimeType });
+      const file = new File([blob], filePath.split("/").pop() || "image", {
+        type: mimeType,
+      });
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from("blog-images")
         .upload(filePath, file, {
           cacheControl: "3600",
-          upsert: false,
+          upsert: true,
         });
 
       if (error) throw error;
-      return filePath;
+      const { data } = supabase.storage
+        .from("blog-images")
+        .getPublicUrl(filePath);
+      const cleanUrl = data.publicUrl.split("?")[0];
+      return `${cleanUrl}?t=${Date.now()}`;
     } catch (err) {
       console.error("Failed to upload base64 image to Supabase on save:", err);
       return imageSrc;
@@ -381,7 +435,14 @@ export function BlogEditor() {
     const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
     setCoverImage(finalCoverImage);
 
-    const tags = tagsString
+    const categoriesArray = category
+      ? category
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
+
+    const tagsArray = tagsString
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
@@ -396,9 +457,10 @@ export function BlogEditor() {
       excerpt,
       content: convertHtmlToBlocks(content),
       coverImage: finalCoverImage,
-      category,
+      category: categoriesArray,
       status: "draft" as const,
-      tags,
+      tags: tagsArray,
+      authorId: user?.id,
       readingTime: "5 min",
       author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
       createdAt: new Date().toISOString(),
@@ -429,10 +491,18 @@ export function BlogEditor() {
     const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
     setCoverImage(finalCoverImage);
 
-    const tags = tagsString
+    const categoriesArray = category
+      ? category
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
+
+    const tagsArray = tagsString
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+
     const blogData = {
       title: title || "Untitled Post",
       slug:
@@ -441,9 +511,10 @@ export function BlogEditor() {
       excerpt,
       content: convertHtmlToBlocks(content),
       coverImage: finalCoverImage,
-      category,
+      category: categoriesArray,
       status: "published" as const,
-      tags,
+      tags: tagsArray,
+      authorId: user?.id,
       readingTime: "5 min",
       author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
       createdAt: new Date().toISOString(),

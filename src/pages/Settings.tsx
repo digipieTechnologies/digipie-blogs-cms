@@ -65,19 +65,33 @@ export function Settings() {
 
       if (selectedFile) {
         const fileExt = selectedFile.name.split(".").pop();
-        const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `${fileName}`;
+        let filePath = "";
+
+        if (profile?.avatar_url) {
+          // If avatar already exists, extract the file name from URL to overwrite/update in-place
+          // Strip any query strings/cache-busters first
+          const cleanAvatarUrl = profile.avatar_url.split("?")[0];
+          const parts = cleanAvatarUrl.split("users/");
+          filePath =
+            parts.length > 1 ? parts[1] : `avatar-${user.id}.${fileExt}`;
+        } else {
+          filePath = `avatar-${user.id}.${fileExt}`;
+        }
 
         const { error: uploadError } = await supabase.storage
           .from("users")
-          .upload(filePath, selectedFile, { cacheControl: "3600", upsert: true });
+          .upload(filePath, selectedFile, {
+            cacheControl: "3600",
+            upsert: true,
+          });
 
         if (uploadError) {
           throw uploadError;
         }
 
         const { data } = supabase.storage.from("users").getPublicUrl(filePath);
-        avatarUrl = data.publicUrl;
+        const cleanUrl = data.publicUrl.split("?")[0];
+        avatarUrl = `${cleanUrl}?t=${Date.now()}`;
       }
 
       const { error: updateError } = await supabase
@@ -230,7 +244,9 @@ export function Settings() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Confirm New Password</label>
+                <label className="text-sm font-medium">
+                  Confirm New Password
+                </label>
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -244,7 +260,9 @@ export function Settings() {
                 className="w-full gap-2"
                 disabled={isSavingPassword}
               >
-                {isSavingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isSavingPassword && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
                 Change Password
               </Button>
             </form>

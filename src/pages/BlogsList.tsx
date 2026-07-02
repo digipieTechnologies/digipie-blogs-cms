@@ -54,13 +54,21 @@ export function BlogsList() {
 
   const filteredBlogs = blogs
     .filter((b) => {
+      const categoryString = Array.isArray(b.category)
+        ? b.category.join(", ")
+        : b.category || "";
+
       const matchesSearch =
         b.title.toLowerCase().includes(search.toLowerCase()) ||
-        b.category.toLowerCase().includes(search.toLowerCase());
+        categoryString.toLowerCase().includes(search.toLowerCase());
 
       const matchesCategory =
         selectedCategory === "all" ||
-        b.category.toLowerCase() === selectedCategory.toLowerCase();
+        (Array.isArray(b.category)
+          ? b.category.some(
+              (cat) => cat.toLowerCase() === selectedCategory.toLowerCase(),
+            )
+          : b.category.toLowerCase() === selectedCategory.toLowerCase());
 
       const matchesStatus =
         selectedStatus === "all" || b.status === selectedStatus;
@@ -128,8 +136,7 @@ export function BlogsList() {
   const columns: ColumnDef<Blog>[] = [
     {
       header: "Post",
-      cellClassName:
-        "w-[40%] max-w-[250px] sm:max-w-[350px] md:max-w-[450px] lg:max-w-[550px]",
+      cellClassName: "w-[25%] min-w-[200px] max-w-[300px]",
       cell: (blog) => (
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0">
@@ -151,12 +158,64 @@ export function BlogsList() {
       ),
     },
     {
-      header: "Category",
+      header: "Author",
       cellClassName: "whitespace-nowrap",
       cell: (blog) => (
-        <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50">
-          {blog.category}
-        </span>
+        <div className="flex items-center gap-2">
+          <img
+            src={
+              blog.author?.avatar ||
+              `https://api.dicebear.com/7.x/initials/svg?seed=${blog.author?.name || "admin"}`
+            }
+            alt=""
+            className="w-6 h-6 rounded-full object-cover border border-border/50"
+          />
+          <span className="text-sm font-medium text-foreground">
+            {blog.author?.name || "Admin"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Category",
+      cellClassName: "max-w-[150px]",
+      cell: (blog) => (
+        <div className="flex flex-wrap gap-1">
+          {Array.isArray(blog.category) ? (
+            blog.category.map((cat) => (
+              <span
+                key={cat}
+                className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50"
+              >
+                {cat}
+              </span>
+            ))
+          ) : (
+            <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50">
+              {blog.category}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: "Tags",
+      cellClassName: "max-w-[150px]",
+      cell: (blog) => (
+        <div className="flex flex-wrap gap-1">
+          {blog.tags && blog.tags.length > 0 ? (
+            blog.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+              >
+                {tag}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          )}
+        </div>
       ),
     },
     {
@@ -178,7 +237,7 @@ export function BlogsList() {
       ),
     },
     {
-      header: "Date",
+      header: "Created",
       cellClassName: "whitespace-nowrap text-muted-foreground",
       cell: (blog) =>
         new Date(blog.createdAt).toLocaleDateString(undefined, {
@@ -186,6 +245,20 @@ export function BlogsList() {
           day: "numeric",
           year: "numeric",
         }),
+    },
+    {
+      header: "Published",
+      cellClassName: "whitespace-nowrap text-muted-foreground",
+      cell: (blog) =>
+        blog.publishedAt ? (
+          new Date(blog.publishedAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        ) : (
+          <span className="text-xs text-muted-foreground italic">Draft</span>
+        ),
     },
     {
       header: "Actions",
@@ -327,10 +400,21 @@ export function BlogsList() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-          {blog.category}
-        </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {Array.isArray(blog.category) ? (
+          blog.category.map((cat) => (
+            <span
+              key={cat}
+              className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground"
+            >
+              {cat}
+            </span>
+          ))
+        ) : (
+          <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
+            {blog.category}
+          </span>
+        )}
         <span
           className={cn(
             "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset",

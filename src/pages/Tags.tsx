@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Plus,
-  Search,
-  Edit,
-  Trash,
-  Loader2,
-} from "lucide-react";
+import { Plus, Search, Edit, Trash, Loader2 } from "lucide-react";
 
 import type { Tag } from "@/types";
 import {
