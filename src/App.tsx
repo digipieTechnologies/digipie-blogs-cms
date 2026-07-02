@@ -6,11 +6,14 @@ import { BlogEditor } from "@/pages/BlogEditor";
 import { BlogPreview } from "@/pages/BlogPreview";
 import { Categories } from "@/pages/Categories";
 import { Settings } from "@/pages/Settings";
+import { Login } from "@/pages/Login";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={<Login />} />
+        
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="blogs" element={<BlogsList />} />

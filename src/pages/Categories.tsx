@@ -107,20 +107,15 @@ export function Categories() {
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <div>
+        {/* <div>
           <h2 className="text-2xl font-semibold tracking-tight">Categories</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Organize your content with topics.
           </p>
-        </div>
-        <Button onClick={handleCreateCategory} className="gap-2 shadow-sm">
-          <Plus className="h-4 w-4" />
-          Add Category
-        </Button>
-      </div>
+        </div> */}
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex justify-end items-center gap-4">
+        <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
@@ -131,6 +126,12 @@ export function Categories() {
           />
         </div>
       </div>
+        <Button onClick={handleCreateCategory} className="gap-2 shadow-sm">
+          <Plus className="h-4 w-4" />
+          Add Category
+        </Button>
+      </div>
+
 
       <DataTable
         columns={columns}
