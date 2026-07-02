@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { mockBlogs } from "@/data/mock";
+import { db } from "@/lib/db";
+import type { Blog } from "@/types";
 import { getBlogImageUrl, convertContentToHtml } from "@/lib/utils";
 
 interface TocItem {
@@ -140,11 +141,27 @@ export function BlogDetailPreview({
     };
   }, [toc, activeId]);
 
-  const related = mockBlogs
-    .filter(
-      (b) => b.category.toLowerCase() === (blog.category || "").toLowerCase(),
-    )
-    .slice(0, 3);
+  const [related, setRelated] = useState<Blog[]>([]);
+
+  useEffect(() => {
+    async function loadRelated() {
+      if (!blog.category) return;
+      try {
+        const allBlogs = await db.getBlogs();
+        const filtered = allBlogs
+          .filter(
+            (b) =>
+              b.category.toLowerCase() === blog.category.toLowerCase() &&
+              b.title !== blog.title
+          )
+          .slice(0, 3);
+        setRelated(filtered);
+      } catch (e) {
+        console.error("Failed to load related blogs", e);
+      }
+    }
+    loadRelated();
+  }, [blog.category, blog.title]);
 
   const formattedDate = useMemo(() => {
     try {
@@ -360,7 +377,7 @@ export function BlogDetailPreview({
       )}
 
       {/* CTA */}
-      <div className="max-w-425 px-6 md:px-8 lg:px-24 mx-auto">
+      {/* <div className="max-w-425 px-6 md:px-8 lg:px-24 mx-auto">
         <section className="mb-16 rounded-3xl overflow-hidden bg-navy-dark relative">
           <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-slate-800/40 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-12 -left-12 w-48 h-48 rounded-full bg-orange/20 blur-3xl pointer-events-none" />
@@ -396,7 +413,7 @@ export function BlogDetailPreview({
             </div>
           </div>
         </section>
-      </div>
+      </div> */}
     </div>
   );
 }

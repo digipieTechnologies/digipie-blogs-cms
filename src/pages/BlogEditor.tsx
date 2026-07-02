@@ -16,19 +16,14 @@ import {
   Undo,
   Redo,
   LayoutPanelLeft,
-  Heading1,
-  Heading2,
-  Heading3,
   ChevronDown,
   CheckSquare,
   Minus,
-  Check,
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { mockBlogs } from "@/data/mock";
+import { useNavigate, useParams } from "react-router-dom";
 import { BlogDetailPreview } from "@/components/BlogDetailPreview";
-import { db } from "@/lib/db";
-import type { Category } from "@/types";
+import { useBlog, useCreateBlog, useUpdateBlog } from "@/hooks/useBlogs";
+import { useCategories } from "@/hooks/useCategories";
 import { supabase } from "@/lib/supabase";
 import { getBlogImageUrl, convertContentToHtml } from "@/lib/utils";
 import {
@@ -99,7 +94,6 @@ export function BlogEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditing = !!id && id !== "new";
-  const existingBlog = isEditing ? mockBlogs.find((b) => b.id === id) : null;
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("Start writing..");
@@ -113,8 +107,14 @@ export function BlogEditor() {
   const [status, setStatus] = useState<"draft" | "published" | "archived">(
     "draft",
   );
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const { data: fetchedBlog, isLoading: blogLoading } = useBlog(isEditing ? id : undefined);
+  
+  const createBlogMutation = useCreateBlog();
+  const updateBlogMutation = useUpdateBlog();
+
+  const loading = isEditing ? (categoriesLoading || blogLoading) : categoriesLoading;
 
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -180,33 +180,17 @@ export function BlogEditor() {
   };
 
   useEffect(() => {
-    async function loadEditorData() {
-      try {
-        setLoading(true);
-        const cats = await db.getCategories();
-        setCategories(cats);
-
-        if (isEditing && id) {
-          const blog = await db.getBlog(id);
-          if (blog) {
-            setTitle(blog.title);
-            setContent(convertContentToHtml(blog.content));
-            setCoverImage(blog.coverImage);
-            setCategory(blog.category.toLowerCase());
-            setSlug(blog.slug);
-            setExcerpt(blog.excerpt);
-            setTagsString(blog.tags?.join(", ") || "");
-            setStatus(blog.status);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load editor data:", err);
-      } finally {
-        setLoading(false);
-      }
+    if (isEditing && fetchedBlog) {
+      setTitle(fetchedBlog.title);
+      setContent(convertContentToHtml(fetchedBlog.content));
+      setCoverImage(fetchedBlog.coverImage || "");
+      setCategory(fetchedBlog.category.toLowerCase());
+      setSlug(fetchedBlog.slug);
+      setExcerpt(fetchedBlog.excerpt);
+      setTagsString(fetchedBlog.tags?.join(", ") || "");
+      setStatus(fetchedBlog.status);
     }
-    loadEditorData();
-  }, [id, isEditing]);
+  }, [fetchedBlog, isEditing]);
 
   useEffect(() => {
     if (editorRef.current && !isPreviewMode && !isHtmlMode && !loading) {
@@ -247,18 +231,31 @@ export function BlogEditor() {
       updatedAt: new Date().toISOString(),
     };
 
-    try {
-      if (isEditing && id) {
-        await db.updateBlog(id, blogData);
-        alert("Blog updated successfully!");
-      } else {
-        const created = await db.createBlog(blogData);
-        alert("Blog created successfully!");
-        navigate(`/blogs/${created.id}`);
-      }
-    } catch (err) {
-      console.error("Error saving blog:", err);
-      alert("Failed to save blog.");
+    if (isEditing && id) {
+      updateBlogMutation.mutate(
+        { id, blog: blogData },
+        {
+          onSuccess: () => {
+            alert("Blog updated successfully!");
+          },
+          onError: () => {
+            alert("Failed to update blog.");
+          }
+        }
+      );
+    } else {
+      createBlogMutation.mutate(
+        blogData,
+        {
+          onSuccess: (created) => {
+            alert("Blog created successfully!");
+            navigate(`/blogs/${created.id}`);
+          },
+          onError: () => {
+            alert("Failed to create blog.");
+          }
+        }
+      );
     }
   };
 

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Bell, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -5,6 +6,26 @@ import { useLocation } from 'react-router-dom';
 
 export function TopNav() {
   const location = useLocation();
+  const [blogsCount, setBlogsCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleCount = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      setBlogsCount(customEvent.detail);
+    };
+
+    window.addEventListener('blogs-count-updated', handleCount);
+
+    if (location.pathname === '/blogs') {
+      import('@/lib/db').then(({ db }) => {
+        db.getBlogs().then(blogs => setBlogsCount(blogs.length));
+      });
+    } else {
+      setBlogsCount(null);
+    }
+
+    return () => window.removeEventListener('blogs-count-updated', handleCount);
+  }, [location.pathname]);
   
   // Very basic title generation from path
   const getPageTitle = () => {
@@ -22,7 +43,14 @@ export function TopNav() {
   return (
     <header className="flex h-16 items-center gap-4 border-b border-border/50 bg-background/50 px-6 backdrop-blur-xl shrink-0">
       <div className="flex flex-1 items-center gap-4">
-        <h1 className="text-lg font-semibold text-foreground">{getPageTitle()}</h1>
+        <h1 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          {getPageTitle()}
+          {location.pathname === '/blogs' && blogsCount !== null && (
+            <span className="text-sm font-normal text-muted-foreground bg-muted/65 px-2 py-0.5 rounded-full border border-border/20">
+              {blogsCount} total
+            </span>
+          )}
+        </h1>
         <div className="ml-auto flex items-center space-x-4">
           <div className="relative hidden md:block w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

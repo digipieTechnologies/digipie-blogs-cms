@@ -1,35 +1,17 @@
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, FolderTree, Activity, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { cn, getBlogImageUrl } from "@/lib/utils";
-import { db } from "@/lib/db";
-import type { Blog } from "@/types";
+import { useBlogs } from "@/hooks/useBlogs";
+import { useCategories } from "@/hooks/useCategories";
 
 export function Dashboard() {
-  const [blogs, setBlogs] = useState<Blog[]>([]);
-  const [categoryCount, setCategoryCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const { data: blogs = [], isLoading: blogsLoading } = useBlogs();
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
 
-  useEffect(() => {
-    async function loadStats() {
-      try {
-        setLoading(true);
-        const [blogsData, catsData] = await Promise.all([
-          db.getBlogs(),
-          db.getCategories(),
-        ]);
-        setBlogs(blogsData);
-        setCategoryCount(catsData.length);
-      } catch (err) {
-        console.error("Error loading dashboard stats:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadStats();
-  }, []);
+  const loading = blogsLoading || categoriesLoading;
+  const categoryCount = categories.length;
 
   const publishedCount = blogs.filter((b) => b.status === "published").length;
   const draftCount = blogs.filter((b) => b.status === "draft").length;

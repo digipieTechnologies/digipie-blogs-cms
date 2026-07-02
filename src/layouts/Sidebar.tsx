@@ -42,12 +42,6 @@ export function Sidebar() {
           })}
         </nav>
       </div>
-      <div className="p-4 border-t border-border/50">
-        <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground">
-          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-          All systems operational
-        </div>
-      </div>
     </div>
   );
 }

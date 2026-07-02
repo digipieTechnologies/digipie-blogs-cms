@@ -79,7 +79,7 @@ export const db = {
         author: b.author || { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
         createdAt: b.created_at || b.createdAt,
         updatedAt: b.updated_at || b.updatedAt,
-        readingTime: b.reading_time || b.readingTime || "5 min",
+        readingTime: b.reading_time ? `${b.reading_time} min` : b.readingTime || "5 min",
         tags: b.tags || [],
       }));
     } catch (err) {
@@ -133,7 +133,7 @@ export const db = {
         author: data.author || { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
         createdAt: data.created_at || data.createdAt,
         updatedAt: data.updated_at || data.updatedAt,
-        readingTime: data.reading_time || data.readingTime || "5 min",
+        readingTime: data.reading_time ? `${data.reading_time} min` : data.readingTime || "5 min",
         tags: tags.length > 0 ? tags : (data.tags || []),
       };
     } catch (err) {
@@ -174,8 +174,7 @@ export const db = {
         category_id: categoryId,
         status: blog.status,
         cover_image: blog.coverImage,
-        reading_time: blog.readingTime,
-        tags: blog.tags,
+        reading_time: typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : (blog.readingTime || 5),
       };
 
       const { data, error } = await supabase
@@ -263,8 +262,7 @@ export const db = {
       if (categoryId !== undefined) updateData.category_id = categoryId;
       if (blog.status !== undefined) updateData.status = blog.status;
       if (blog.coverImage !== undefined) updateData.cover_image = blog.coverImage;
-      if (blog.readingTime !== undefined) updateData.reading_time = blog.readingTime;
-      if (blog.tags !== undefined) updateData.tags = blog.tags;
+      if (blog.readingTime !== undefined) updateData.reading_time = typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : blog.readingTime;
 
       const { error } = await supabase
         .from("blogs")
