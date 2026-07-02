@@ -13,6 +13,7 @@ import {
   Trash,
   Eye,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -26,6 +27,9 @@ import { cn, getBlogImageUrl } from "@/lib/utils";
 import type { Blog } from "@/types";
 import { useBlogs, useDeleteBlog } from "@/hooks/useBlogs";
 import { useCategories } from "@/hooks/useCategories";
+import { db } from "@/lib/db";
+import toast from "react-hot-toast";
+import { Modal } from "@/components/ui/modal";
 
 export function BlogsList() {
   const [search, setSearch] = useState("");
@@ -34,9 +38,10 @@ export function BlogsList() {
   const [sortBy, setSortBy] = useState<
     "date-desc" | "date-asc" | "title-asc" | "title-desc"
   >("date-desc");
-
+  const [deleteBlogId, setDeleteBlogId] = useState<null | any>(null);
   const { data: blogs = [], isLoading: blogsLoading } = useBlogs();
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories();
   const deleteBlogMutation = useDeleteBlog();
 
   const loading = blogsLoading || categoriesLoading;
@@ -81,7 +86,7 @@ export function BlogsList() {
       }
       return 0;
     });
-    
+
   const [visibleCount, setVisibleCount] = useState(10);
   const itemsPerPage = 10;
 
@@ -92,7 +97,9 @@ export function BlogsList() {
   const totalItems = filteredBlogs.length;
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('blogs-count-updated', { detail: totalItems }));
+    window.dispatchEvent(
+      new CustomEvent("blogs-count-updated", { detail: totalItems }),
+    );
   }, [totalItems]);
 
   const paginatedBlogs = filteredBlogs.slice(0, visibleCount);
@@ -108,7 +115,7 @@ export function BlogsList() {
           setVisibleCount((prev) => Math.min(prev + itemsPerPage, totalItems));
         }
       },
-      { root: null, rootMargin: "200px", threshold: 0 }
+      { root: null, rootMargin: "200px", threshold: 0 },
     );
 
     if (loaderRef.current) {
@@ -121,7 +128,8 @@ export function BlogsList() {
   const columns: ColumnDef<Blog>[] = [
     {
       header: "Post",
-      cellClassName: "w-[40%] max-w-[250px] sm:max-w-[350px] md:max-w-[450px] lg:max-w-[550px]",
+      cellClassName:
+        "w-[40%] max-w-[250px] sm:max-w-[350px] md:max-w-[450px] lg:max-w-[550px]",
       cell: (blog) => (
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0">
@@ -217,12 +225,18 @@ export function BlogsList() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem asChild>
-                <Link to={`/blogs/${blog.id}`} className="flex items-center w-full">
+                <Link
+                  to={`/blogs/${blog.id}`}
+                  className="flex items-center w-full"
+                >
                   <Edit className="mr-2 h-4 w-4" /> Edit
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link to={`/blogs/preview/${blog.id}`} className="flex items-center w-full">
+                <Link
+                  to={`/blogs/preview/${blog.id}`}
+                  className="flex items-center w-full"
+                >
                   <Eye className="mr-2 h-4 w-4" /> Preview
                 </Link>
               </DropdownMenuItem>
@@ -301,7 +315,9 @@ export function BlogsList() {
                 <DropdownMenuItem onClick={() => setSelectedStatus("all")}>
                   All Statuses {selectedStatus === "all" && " ✓"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSelectedStatus("published")}>
+                <DropdownMenuItem
+                  onClick={() => setSelectedStatus("published")}
+                >
                   Published {selectedStatus === "published" && " ✓"}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setSelectedStatus("draft")}>
@@ -345,7 +361,10 @@ export function BlogsList() {
           </div>
         </div>
 
-        <Button asChild className="gap-2 shadow-sm shrink-0 h-10 w-full xl:w-auto">
+        <Button
+          asChild
+          className="gap-2 shadow-sm shrink-0 h-10 w-full xl:w-auto"
+        >
           <Link to="/blogs/new">
             <Plus className="h-4 w-4" />
             New Blog
@@ -362,7 +381,10 @@ export function BlogsList() {
         footer={
           <>
             {!loading && visibleCount < totalItems && (
-              <div ref={loaderRef} className="p-8 text-center text-muted-foreground flex justify-center items-center gap-2">
+              <div
+                ref={loaderRef}
+                className="p-8 text-center text-muted-foreground flex justify-center items-center gap-2"
+              >
                 <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></span>
                 Loading more blogs...
               </div>
@@ -373,6 +395,40 @@ export function BlogsList() {
               </div>
             )}
           </>
+        }
+      />
+
+      <Modal
+        isOpen={!!deleteBlogId}
+        onClose={() => setDeleteBlogId(null)}
+        title="Delete Blog Post?"
+        description="Are you sure you want to delete this blog post? This action cannot be undone."
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteBlogId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBlogMutation.isPending}
+              onClick={async () => {
+                if (deleteBlogId) {
+                  try {
+                    await deleteBlogMutation.mutateAsync(deleteBlogId);
+                    toast.success("Blog deleted successfully");
+                  } catch (err) {
+                    toast.error("Failed to delete blog");
+                  } finally {
+                    setDeleteBlogId(null);
+                  }
+                }
+              }}
+              className="gap-2"
+            >
+              {deleteBlogMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
+          </div>
         }
       />
     </div>

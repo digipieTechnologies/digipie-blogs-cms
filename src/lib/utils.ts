@@ -15,12 +15,12 @@ export function getBlogImageUrl(path: string | undefined): string {
     return path;
   }
   const url = import.meta.env.VITE_SUPABASE_URL || "";
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
   if (url && !url.includes("YOUR_SUPABASE_PROJECT_URL")) {
     const cleanUrl = url.replace(/\/$/, "");
     const cleanPath = path.replace(/^\//, "");
-    const tokenParam = anonKey ? `?token=${anonKey}` : "";
-    return `${cleanUrl}/storage/v1/object/public/blog-images/${cleanPath}${tokenParam}`;
+    // Public bucket URL — no token param needed; the anon key is a JWT for
+    // API authorization headers, not a URL query parameter.
+    return `${cleanUrl}/storage/v1/object/public/blog-images/${cleanPath}`;
   }
   return path;
 }
@@ -37,6 +37,31 @@ export function convertContentToHtml(content: any): string {
     return content;
   }
   
+  if (Array.isArray(content)) {
+    if (
+      content.length > 0 &&
+      content[0] &&
+      content[0].type !== undefined &&
+      content[0].text !== undefined
+    ) {
+      return content
+        .map((block: any) => {
+          const idAttr = block.id ? ` id="${block.id}"` : "";
+          const text = block.text || "";
+          switch (block.type) {
+            case "heading":
+              return `<h2${idAttr}>${text}</h2>`;
+            case "subheading":
+              return `<h3${idAttr}>${text}</h3>`;
+            case "paragraph":
+            default:
+              return `<p>${text}</p>`;
+          }
+        })
+        .join("");
+    }
+  }
+
   if (content && typeof content === "object") {
     // Editor.js structure
     if (Array.isArray(content.blocks)) {
@@ -114,4 +139,97 @@ function convertNodeToHtml(node: any): string {
     default:
       return `<p>${childrenHtml}</p>`;
   }
+}
+
+export function convertHtmlToBlocks(html: string): any[] {
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
+    return [{ text: html, type: "paragraph" }];
+  }
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const blocks: any[] = [];
+
+  const isBlockElement = (node: Element): boolean => {
+    const tags = [
+      "p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "section", "article",
+      "blockquote", "ul", "ol", "li"
+    ];
+    return tags.includes(node.tagName.toLowerCase());
+  };
+
+  const hasBlockChildren = (node: Element): boolean => {
+    return Array.from(node.children).some((child) => isBlockElement(child));
+  };
+
+  const parseNode = (node: Element) => {
+    const tagName = node.tagName.toLowerCase();
+
+    // If it's a heading
+    if (tagName === "h1" || tagName === "h2") {
+      const text = node.innerHTML.trim();
+      if (text) {
+        const id =
+          node.id ||
+          node.textContent
+            ?.toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+        blocks.push({ id, text, type: "heading" });
+      }
+      return;
+    }
+
+    // If it's a subheading
+    if (tagName === "h3" || tagName === "h4") {
+      const text = node.innerHTML.trim();
+      if (text) {
+        const id =
+          node.id ||
+          node.textContent
+            ?.toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+        blocks.push({ id, text, type: "subheading" });
+      }
+      return;
+    }
+
+    // If it's a paragraph
+    if (tagName === "p") {
+      const text = node.innerHTML.trim();
+      if (text) {
+        blocks.push({ text, type: "paragraph" });
+      }
+      return;
+    }
+
+    // If it's a list item (li) - treat it as a bulleted paragraph block
+    if (tagName === "li") {
+      const text = node.innerHTML.trim();
+      if (text) {
+        blocks.push({ text: `• ${text}`, type: "paragraph" });
+      }
+      return;
+    }
+
+    // If it's a container (like div, section)
+    if (hasBlockChildren(node)) {
+      Array.from(node.children).forEach((child) => parseNode(child));
+    } else {
+      const text = node.innerHTML.trim();
+      if (text && tagName !== "body") {
+        blocks.push({ text, type: "paragraph" });
+      }
+    }
+  };
+
+  // Start parsing from body children
+  Array.from(doc.body.children).forEach((child) => parseNode(child));
+
+  // Fallback if no blocks were parsed but there is raw text
+  if (blocks.length === 0 && html.trim()) {
+    blocks.push({ text: html.trim(), type: "paragraph" });
+  }
+
+  return blocks;
 }

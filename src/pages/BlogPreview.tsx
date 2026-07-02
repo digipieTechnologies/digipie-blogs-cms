@@ -37,6 +37,8 @@ export function BlogPreview() {
   const defaultBlog: Blog = {
     id: id || "new",
     title: "",
+    slug: "",
+    excerpt: "",
     content: "Start writing..",
     coverImage: "",
     category: "Engineering",
@@ -52,7 +54,8 @@ export function BlogPreview() {
 
   const mergedBlog = {
     ...activeBlog,
-    title: previewData.title !== undefined ? previewData.title : activeBlog.title,
+    title:
+      previewData.title !== undefined ? previewData.title : activeBlog.title,
     content:
       previewData.content !== undefined
         ? previewData.content

@@ -19,19 +19,27 @@ import {
   ChevronDown,
   CheckSquare,
   Minus,
+  Loader2,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BlogDetailPreview } from "@/components/BlogDetailPreview";
 import { useBlog, useCreateBlog, useUpdateBlog } from "@/hooks/useBlogs";
 import { useCategories } from "@/hooks/useCategories";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { getBlogImageUrl, convertContentToHtml } from "@/lib/utils";
+import {
+  getBlogImageUrl,
+  convertContentToHtml,
+  convertHtmlToBlocks,
+} from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import toast from "react-hot-toast";
+import { db } from "@/lib/db";
 
 const formatHtmlString = (html: string): string => {
   let formatted = "";
@@ -94,27 +102,36 @@ export function BlogEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditing = !!id && id !== "new";
+  const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [content, setContent] = useState("Start writing..");
   const [coverImage, setCoverImage] = useState("");
   const [isHtmlMode, setIsHtmlMode] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [category, setCategory] = useState("engineering");
+  const [category, setCategory] = useState("Engineering");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [tagsString, setTagsString] = useState("");
   const [status, setStatus] = useState<"draft" | "published" | "archived">(
     "draft",
   );
+  const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
 
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
-  const { data: fetchedBlog, isLoading: blogLoading } = useBlog(isEditing ? id : undefined);
-  
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories();
+  const { data: fetchedBlog, isLoading: blogLoading } = useBlog(
+    isEditing ? id : undefined,
+  );
+
   const createBlogMutation = useCreateBlog();
   const updateBlogMutation = useUpdateBlog();
 
-  const loading = isEditing ? (categoriesLoading || blogLoading) : categoriesLoading;
+  const loading = isEditing
+    ? categoriesLoading || blogLoading
+    : categoriesLoading;
 
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -151,16 +168,8 @@ export function BlogEditor() {
 
             if (error) throw error;
 
-            const { data: signData, error: signError } = await supabase.storage
-              .from("blog-images")
-              .createSignedUrl(filePath, 60 * 60);
-
-            if (signError) throw signError;
-
-            if (signData?.signedUrl) {
-              setCoverImage(signData.signedUrl);
-              return;
-            }
+            setCoverImage(filePath);
+            return;
           } catch (err) {
             console.warn(
               "Supabase upload failed, falling back to base64 reader:",
@@ -194,22 +203,131 @@ export function BlogEditor() {
 
   useEffect(() => {
     if (editorRef.current && !isPreviewMode && !isHtmlMode && !loading) {
-      if (content && content !== "Start writing..") {
-        editorRef.current.innerHTML = content;
-      } else {
-        editorRef.current.innerHTML =
-          '<p class="text-muted-foreground/50">Start writing...</p>';
+      if (editorRef.current.innerHTML !== content) {
+        if (content && content !== "Start writing..") {
+          editorRef.current.innerHTML = content;
+        } else if (!content) {
+          editorRef.current.innerHTML =
+            '<p class="text-muted-foreground/50">Start writing...</p>';
+        }
       }
     }
-  }, [isPreviewMode, isHtmlMode, loading]);
+  }, [content, isPreviewMode, isHtmlMode, loading]);
 
-  useEffect(() => {
-    if (!isHtmlMode && editorRef.current && !loading) {
-      editorRef.current.innerHTML = content;
+  const handleBackWithSave = () => {
+    const hasNoModifications =
+      !isEditing &&
+      !title.trim() &&
+      (!content || content === "Start writing..");
+
+    if (hasNoModifications) {
+      navigate("/blogs");
+    } else {
+      setShowExitDialog(true);
     }
-  }, [isHtmlMode, loading]);
+  };
+
+  const uploadBase64ImageIfNeeded = async (
+    imageSrc: string,
+  ): Promise<string> => {
+    if (!imageSrc || !imageSrc.startsWith("data:image/")) {
+      return imageSrc;
+    }
+
+    const isSupabaseConfigured = () => {
+      const url = import.meta.env.VITE_SUPABASE_URL || "";
+      const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+      return (
+        url &&
+        !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
+        key &&
+        !key.includes("YOUR_SUPABASE_ANON_KEY")
+      );
+    };
+
+    if (!isSupabaseConfigured()) {
+      return imageSrc;
+    }
+
+    try {
+      const mimeType =
+        imageSrc.split(",")[0].match(/:(.*?);/)?.[1] || "image/png";
+      const fileExt = mimeType.split("/")[1] || "png";
+      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const filePath = `covers/${fileName}`;
+
+      const response = await fetch(imageSrc);
+      const blob = await response.blob();
+      const file = new File([blob], fileName, { type: mimeType });
+
+      const { data, error } = await supabase.storage
+        .from("blog-images")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (error) throw error;
+      return filePath;
+    } catch (err) {
+      console.error("Failed to upload base64 image to Supabase on save:", err);
+      return imageSrc;
+    }
+  };
+
+  const saveAndExit = async () => {
+    setIsSavingDraft(true);
+    const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
+    setCoverImage(finalCoverImage);
+
+    const tags = tagsString
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const blogData = {
+      title: title.trim() || "Untitled Post",
+      slug:
+        slug ||
+        (title.trim() || "untitled-post")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-"),
+      excerpt,
+      content: convertHtmlToBlocks(content),
+      coverImage: finalCoverImage,
+      category,
+      status: "draft" as const,
+      tags,
+      readingTime: "5 min",
+      author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (isEditing && id) {
+        await db.updateBlog(id, blogData);
+        await queryClient.invalidateQueries({ queryKey: ["blogs"] });
+        toast.success("Draft updated successfully");
+      } else {
+        await db.createBlog(blogData);
+        await queryClient.invalidateQueries({ queryKey: ["blogs"] });
+        toast.success("Draft saved successfully");
+      }
+    } catch (err) {
+      console.error("Error saving draft on exit:", err);
+      toast.error("Failed to save draft");
+    } finally {
+      setIsSavingDraft(false);
+      setShowExitDialog(false);
+      navigate("/blogs");
+    }
+  };
 
   const handleSave = async () => {
+    const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
+    setCoverImage(finalCoverImage);
+
     const tags = tagsString
       .split(",")
       .map((t) => t.trim())
@@ -220,10 +338,10 @@ export function BlogEditor() {
         slug ||
         (title || "untitled-post").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       excerpt,
-      content,
-      coverImage,
-      category: category.charAt(0).toUpperCase() + category.slice(1),
-      status,
+      content: convertHtmlToBlocks(content),
+      coverImage: finalCoverImage,
+      category,
+      status: "published" as const,
       tags,
       readingTime: "5 min",
       author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
@@ -236,26 +354,23 @@ export function BlogEditor() {
         { id, blog: blogData },
         {
           onSuccess: () => {
-            alert("Blog updated successfully!");
+            toast.success("Blog updated successfully!");
           },
           onError: () => {
-            alert("Failed to update blog.");
-          }
-        }
+            toast.error("Failed to update blog.");
+          },
+        },
       );
     } else {
-      createBlogMutation.mutate(
-        blogData,
-        {
-          onSuccess: (created) => {
-            alert("Blog created successfully!");
-            navigate(`/blogs/${created.id}`);
-          },
-          onError: () => {
-            alert("Failed to create blog.");
-          }
-        }
-      );
+      createBlogMutation.mutate(blogData, {
+        onSuccess: (created) => {
+          toast.success("Blog created successfully!");
+          navigate(`/blogs/${created.id}`);
+        },
+        onError: () => {
+          toast.error("Failed to create blog.");
+        },
+      });
     }
   };
 
@@ -317,18 +432,51 @@ export function BlogEditor() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = (e: any) => {
+    input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const url = event.target?.result as string;
+      if (!file) return;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+      const isSupabaseConfigured =
+        supabaseUrl &&
+        !supabaseUrl.includes("YOUR_SUPABASE_PROJECT_URL") &&
+        (import.meta.env.VITE_SUPABASE_ANON_KEY || "");
+
+      if (isSupabaseConfigured) {
+        try {
+          const fileExt = file.name.split(".").pop();
+          const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+          const filePath = `inline/${fileName}`;
+
+          const { error } = await supabase.storage
+            .from("blog-images")
+            .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+          if (error) throw error;
+
+          const cleanUrl = supabaseUrl.replace(/\/$/, "");
+          const publicUrl = `${cleanUrl}/storage/v1/object/public/blog-images/${filePath}`;
           insertHTML(
-            `<img src="${url}" alt="Uploaded image" class="max-w-full h-auto rounded-lg my-4" />`,
+            `<img src="${publicUrl}" alt="Uploaded image" class="max-w-full h-auto rounded-lg my-4" />`,
           );
-        };
-        reader.readAsDataURL(file);
+          return;
+        } catch (err) {
+          console.warn(
+            "Supabase inline image upload failed, falling back to base64:",
+            err,
+          );
+        }
       }
+
+      // Fallback: embed as base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const url = event.target?.result as string;
+        insertHTML(
+          `<img src="${url}" alt="Uploaded image" class="max-w-full h-auto rounded-lg my-4" />`,
+        );
+      };
+      reader.readAsDataURL(file);
     };
     input.click();
   };
@@ -382,7 +530,7 @@ export function BlogEditor() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-full"
-                onClick={() => navigate("/blogs")}
+                onClick={handleBackWithSave}
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -709,15 +857,15 @@ export function BlogEditor() {
               >
                 {categories.length > 0 ? (
                   categories.map((cat) => (
-                    <option key={cat.slug} value={cat.name.toLowerCase()}>
+                    <option key={cat.slug} value={cat.name}>
                       {cat.name}
                     </option>
                   ))
                 ) : (
                   <>
-                    <option value="engineering">Engineering</option>
-                    <option value="product">Product</option>
-                    <option value="design">Design</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Product">Product</option>
+                    <option value="Design">Design</option>
                   </>
                 )}
               </select>
@@ -772,6 +920,46 @@ export function BlogEditor() {
           </div>
         </div>
       </div>
+
+      {showExitDialog && (
+        <div className="fixed inset-0 m-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-background border border-border p-6 rounded-xl shadow-lg max-w-md w-full mx-4 space-y-4 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-foreground">
+              Save as Draft?
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              You have unsaved changes. Do you want to save this post as a draft
+              before leaving?
+            </p>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowExitDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  setShowExitDialog(false);
+                  navigate("/blogs");
+                }}
+              >
+                Discard
+              </Button>
+              <Button
+                onClick={saveAndExit}
+                disabled={isSavingDraft}
+                className="gap-2"
+              >
+                {isSavingDraft && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save as Draft
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

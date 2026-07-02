@@ -160,7 +160,7 @@ export const db = {
         .from("categories")
         .select("id")
         .ilike("name", blog.category)
-        .single();
+        .maybeSingle();
       
       if (catData) {
         categoryId = catData.id;
@@ -194,7 +194,7 @@ export const db = {
             .from("tags")
             .select("id")
             .ilike("name", tagName)
-            .single();
+            .maybeSingle();
 
           if (tagRecord) {
             tagId = tagRecord.id;
@@ -203,7 +203,7 @@ export const db = {
               .from("tags")
               .insert({ name: tagName, slug: tagName.toLowerCase().replace(/[^a-z0-9]+/g, "-") })
               .select("id")
-              .single();
+              .maybeSingle();
             if (newTag) tagId = newTag.id;
           }
 
@@ -250,7 +250,7 @@ export const db = {
           .from("categories")
           .select("id")
           .ilike("name", blog.category)
-          .single();
+          .maybeSingle();
         if (catData) categoryId = catData.id;
       }
 
@@ -282,7 +282,7 @@ export const db = {
             .from("tags")
             .select("id")
             .ilike("name", tagName)
-            .single();
+            .maybeSingle();
 
           if (tagRecord) {
             tagId = tagRecord.id;
@@ -291,7 +291,7 @@ export const db = {
               .from("tags")
               .insert({ name: tagName, slug: tagName.toLowerCase().replace(/[^a-z0-9]+/g, "-") })
               .select("id")
-              .single();
+              .maybeSingle();
             if (newTag) tagId = newTag.id;
           }
 

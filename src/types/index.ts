@@ -3,7 +3,7 @@ export interface Blog {
   title: string;
   slug: string;
   excerpt: string;
-  content: string;
+  content: any;
   category: string;
   status: 'draft' | 'published' | 'archived';
   coverImage: string;
