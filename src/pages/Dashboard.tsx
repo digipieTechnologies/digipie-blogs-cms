@@ -133,7 +133,11 @@ export function Dashboard() {
                 </p>
               ) : (
                 blogs.slice(0, 5).map((blog) => (
-                  <div key={blog.id} className="flex items-center group">
+                  <Link 
+                    to={`/blogs/preview/${blog.id}`}
+                    key={blog.id} 
+                    className="flex items-center group p-2 -mx-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                  >
                     <div className="w-16 h-12 rounded overflow-hidden mr-4 border border-border/50 shrink-0 relative">
                       <img
                         src={getBlogImageUrl(blog.coverImage)}
@@ -142,7 +146,7 @@ export function Dashboard() {
                       />
                     </div>
                     <div className="flex-1 space-y-1 min-w-0">
-                      <p className="text-sm font-medium leading-none truncate group-hover:text-primary transition-colors cursor-pointer">
+                      <p className="text-sm font-medium leading-none truncate group-hover:text-primary transition-colors">
                         {blog.title}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
@@ -164,7 +168,7 @@ export function Dashboard() {
                         {blog.status}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>

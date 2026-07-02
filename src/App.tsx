@@ -8,10 +8,13 @@ import { Categories } from "@/pages/Categories";
 import { Settings } from "@/pages/Settings";
 import { Login } from "@/pages/Login";
 import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
       <Toaster
         position="bottom-right"
         toastOptions={{
@@ -36,19 +39,21 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="blogs" element={<BlogsList />} />
-          <Route path="categories" element={<Categories />} />
-          <Route path="settings" element={<Settings />} />
-          {/* Editor and preview take full screen, no sidebar */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="blogs" element={<BlogsList />} />
+            <Route path="categories" element={<Categories />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+          <Route path="/blogs/new" element={<BlogEditor />} />
+          <Route path="/blogs/:id" element={<BlogEditor />} />
+          <Route path="/blogs/preview/:id" element={<BlogPreview />} />
         </Route>
-        <Route path="/blogs/new" element={<BlogEditor />} />
-        <Route path="/blogs/:id" element={<BlogEditor />} />
-        <Route path="/blogs/preview/:id" element={<BlogPreview />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </AuthProvider>
   );
 }

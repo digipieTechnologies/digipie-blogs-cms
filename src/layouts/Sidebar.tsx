@@ -19,7 +19,7 @@ export function Sidebar() {
           <div className="">
             <img src="/digipie_logo.png" alt="" className="w-6 h-auto" />
           </div>
-          BlogCMS
+          Digipie CMS
         </div>
       </div>
       <div className="flex-1 overflow-y-auto py-4">

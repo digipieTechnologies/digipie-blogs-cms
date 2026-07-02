@@ -321,7 +321,7 @@ export function BlogDetailPreview({
       </div>
 
       {/* Related posts */}
-      {related.length > 0 && (
+      {/* {related.length > 0 && (
         <section className="max-w-425 px-6 md:px-8 lg:px-24 mx-auto pb-16">
           <div className="border-t border-border-brand pt-12">
             <h2 className="text-2xl font-bold text-navy-dark mb-8">
@@ -364,7 +364,7 @@ export function BlogDetailPreview({
             </div>
           </div>
         </section>
-      )}
+      )} */}
 
       {/* CTA */}
       {/* <div className="max-w-425 px-6 md:px-8 lg:px-24 mx-auto">

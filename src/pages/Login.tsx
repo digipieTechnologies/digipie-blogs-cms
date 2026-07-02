@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import toast from "react-hot-toast";
 
 export function Login() {
   const navigate = useNavigate();
@@ -11,14 +13,26 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate network delay for polish
-    setTimeout(() => {
-      setLoading(false);
+    
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+      
       navigate("/");
-    }, 800);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sign in");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

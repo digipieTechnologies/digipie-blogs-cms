@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useLocation, Link } from 'react-router-dom';
-import { Menu, LayoutDashboard, FileText, FolderTree, Settings as SettingsIcon } from 'lucide-react';
+import { Menu, LayoutDashboard, FileText, FolderTree, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -15,6 +17,7 @@ const navigation = [
 
 export function TopNav() {
   const location = useLocation();
+  const { signOut, user } = useAuth();
   const [blogsCount, setBlogsCount] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -65,7 +68,7 @@ export function TopNav() {
               <div className="">
                 <img src="/digipie_logo.png" alt="" className="w-6 h-auto" />
               </div>
-              BlogCMS
+              Digipie CMS
             </div>
           </div>
           <div className="flex-1 overflow-y-auto py-4">
@@ -106,10 +109,20 @@ export function TopNav() {
           )}
         </h1>
         <div className="ml-auto flex items-center space-x-4">
-          <Avatar className="h-8 w-8 cursor-pointer ring-1 ring-border/50 hover:ring-border transition-all">
-            <AvatarImage src="https://i.pravatar.cc/150?u=admin" alt="Admin" />
-            <AvatarFallback>AD</AvatarFallback>
-          </Avatar>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Avatar className="h-8 w-8 cursor-pointer ring-1 ring-border/50 hover:ring-border transition-all">
+                <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.email || 'admin'}`} alt="Admin" />
+                <AvatarFallback>AD</AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive cursor-pointer">
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>
