@@ -1,94 +1,255 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useRef, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Camera, Loader2, KeyRound, User } from "lucide-react";
+import toast from "react-hot-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export function Settings() {
+  const { user, profile, refreshProfile } = useAuth();
+
+  // Profile state
+  const [name, setName] = useState("Admin User");
+  const [avatar, setAvatar] = useState("https://i.pravatar.cc/150?u=admin");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Password state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Loading state
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name || "");
+      setAvatar(profile.avatar_url || "https://i.pravatar.cc/150?u=admin");
+    }
+  }, [profile]);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("Image size must be less than 2MB");
+        return;
+      }
+      setSelectedFile(file);
+      setAvatar(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    if (!user) {
+      toast.error("You must be logged in");
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      let avatarUrl = avatar;
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split(".").pop();
+        const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("users")
+          .upload(filePath, selectedFile, { cacheControl: "3600", upsert: true });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data } = supabase.storage.from("users").getPublicUrl(filePath);
+        avatarUrl = data.publicUrl;
+      }
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({
+          name: name.trim(),
+          avatar_url: avatarUrl,
+        })
+        .eq("id", user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      await refreshProfile();
+      setSelectedFile(null);
+      toast.success("Profile updated successfully");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to update profile");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || !confirmPassword) {
+      toast.error("Password fields are required");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to change password");
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">Manage your site preferences and configurations.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Manage your account profile, credentials, and preferences.
+        </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Profile Card */}
         <Card className="subtle-shadow bg-background/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>General Information</CardTitle>
-            <CardDescription>Basic details about your blog.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5 text-primary" /> Profile Settings
+            </CardTitle>
+            <CardDescription>
+              Update your account display name and photo.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Site Name</label>
-              <Input defaultValue="My Awesome Blog" className="max-w-md" />
+          <CardContent className="space-y-6">
+            <div className="flex flex-col items-center gap-4">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="group relative w-24 h-24 rounded-full border-2 border-border cursor-pointer overflow-hidden bg-muted hover:border-primary transition-all duration-300"
+              >
+                <img
+                  src={avatar}
+                  alt="Profile Avatar"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <Camera className="h-5 w-5 mb-1" />
+                  <span className="text-[10px] font-medium">Change Photo</span>
+                </div>
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+                accept="image/*"
+                className="hidden"
+              />
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG or WEBP. Max 2MB.
+              </p>
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Site Description</label>
-              <textarea 
-                className="flex min-h-[80px] w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                defaultValue="A blog about modern web development and software engineering."
+              <label className="text-sm font-medium">Display Name</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. John Doe"
               />
             </div>
+
+            <Button
+              onClick={handleSaveProfile}
+              className="w-full gap-2"
+              disabled={isSavingProfile}
+            >
+              {isSavingProfile && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Profile
+            </Button>
           </CardContent>
         </Card>
 
+        {/* Change Password Card */}
         <Card className="subtle-shadow bg-background/50 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle>SEO Optimization</CardTitle>
-            <CardDescription>Default meta tags for search engines.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" /> Security
+            </CardTitle>
+            <CardDescription>
+              Change your password to secure your account.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Default SEO Title</label>
-              <Input defaultValue="My Awesome Blog - Web Dev Articles" className="max-w-md" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Default SEO Description</label>
-              <textarea 
-                className="flex min-h-[80px] w-full max-w-md rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                defaultValue="Explore in-depth articles about React, TypeScript, and modern tooling."
-              />
-            </div>
-          </CardContent>
-        </Card>
+          <CardContent>
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Password</label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
 
-        <Card className="subtle-shadow bg-background/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Social Media Links</CardTitle>
-            <CardDescription>Connect your social accounts.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Twitter URL</label>
-              <Input placeholder="https://twitter.com/yourhandle" className="max-w-md" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">GitHub URL</label>
-              <Input placeholder="https://github.com/yourhandle" className="max-w-md" />
-            </div>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm New Password</label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
 
-        <Card className="subtle-shadow bg-background/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Appearance</CardTitle>
-            <CardDescription>Customize the look and feel.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Theme</label>
-              <select className="flex h-10 w-full max-w-[200px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-                <option value="system">System Default</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </div>
+              <Button
+                type="submit"
+                className="w-full gap-2"
+                disabled={isSavingPassword}
+              >
+                {isSavingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
+                Change Password
+              </Button>
+            </form>
           </CardContent>
         </Card>
-        
-        <div className="flex justify-end gap-3 pt-4 border-t border-border">
-          <Button variant="outline" className="bg-background">Cancel</Button>
-          <Button>Save Settings</Button>
-        </div>
       </div>
     </div>
   );

@@ -1,23 +1,38 @@
-import { useState, useEffect } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useLocation, Link } from 'react-router-dom';
-import { Menu, LayoutDashboard, FileText, FolderTree, Settings as SettingsIcon, LogOut } from 'lucide-react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useLocation, Link } from "react-router-dom";
+import {
+  Menu,
+  LayoutDashboard,
+  FileText,
+  FolderTree,
+  Settings as SettingsIcon,
+  LogOut,
+  Tag,
+} from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Blogs", href: "/blogs", icon: FileText },
   { name: "Categories", href: "/categories", icon: FolderTree },
+  { name: "Tags", href: "/tags", icon: Tag },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 
 export function TopNav() {
   const location = useLocation();
-  const { signOut, user } = useAuth();
+  const { signOut, user, profile } = useAuth();
   const [blogsCount, setBlogsCount] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -27,30 +42,31 @@ export function TopNav() {
       setBlogsCount(customEvent.detail);
     };
 
-    window.addEventListener('blogs-count-updated', handleCount);
+    window.addEventListener("blogs-count-updated", handleCount);
 
-    if (location.pathname === '/blogs') {
-      import('@/lib/db').then(({ db }) => {
-        db.getBlogs().then(blogs => setBlogsCount(blogs.length));
+    if (location.pathname === "/blogs") {
+      import("@/lib/db").then(({ db }) => {
+        db.getBlogs().then((blogs) => setBlogsCount(blogs.length));
       });
     } else {
       setBlogsCount(null);
     }
 
-    return () => window.removeEventListener('blogs-count-updated', handleCount);
+    return () => window.removeEventListener("blogs-count-updated", handleCount);
   }, [location.pathname]);
-  
+
   // Very basic title generation from path
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Dashboard';
-    if (path.startsWith('/blogs/new')) return 'Create Blog';
-    if (path.startsWith('/blogs/preview')) return 'Preview Blog';
-    if (path.startsWith('/blogs/')) return 'Edit Blog';
-    if (path.startsWith('/blogs')) return 'Blogs';
-    if (path.startsWith('/categories')) return 'Categories';
-    if (path.startsWith('/settings')) return 'Settings';
-    return 'Overview';
+    if (path === "/") return "Dashboard";
+    if (path.startsWith("/blogs/new")) return "Create Blog";
+    if (path.startsWith("/blogs/preview")) return "Preview Blog";
+    if (path.startsWith("/blogs/")) return "Edit Blog";
+    if (path.startsWith("/blogs")) return "Blogs";
+    if (path.startsWith("/categories")) return "Categories";
+    if (path.startsWith("/tags")) return "Tags";
+    if (path.startsWith("/settings")) return "Settings";
+    return "Overview";
   };
 
   return (
@@ -76,7 +92,8 @@ export function TopNav() {
               {navigation.map((item) => {
                 const isActive =
                   location.pathname === item.href ||
-                  (item.href !== "/" && location.pathname.startsWith(item.href));
+                  (item.href !== "/" &&
+                    location.pathname.startsWith(item.href));
                 return (
                   <Link
                     key={item.name}
@@ -98,11 +115,11 @@ export function TopNav() {
           </div>
         </SheetContent>
       </Sheet>
-      
+
       <div className="flex flex-1 items-center gap-4">
         <h1 className="text-lg font-semibold text-foreground flex items-center gap-2 truncate">
           {getPageTitle()}
-          {location.pathname === '/blogs' && blogsCount !== null && (
+          {location.pathname === "/blogs" && blogsCount !== null && (
             <span className="text-sm font-normal text-muted-foreground bg-muted/65 px-2 py-0.5 rounded-full border border-border/20">
               {blogsCount} total
             </span>
@@ -112,12 +129,57 @@ export function TopNav() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Avatar className="h-8 w-8 cursor-pointer ring-1 ring-border/50 hover:ring-border transition-all">
-                <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.email || 'admin'}`} alt="Admin" />
-                <AvatarFallback>AD</AvatarFallback>
+                <AvatarImage
+                  src={
+                    profile?.avatar_url ||
+                    `https://api.dicebear.com/7.x/initials/svg?seed=${profile?.name || user?.email || "admin"}`
+                  }
+                  alt={profile?.name || "Admin"}
+                  className="object-cover"
+                />
+                <AvatarFallback>
+                  {(profile?.name || "AD").substring(0, 2).toUpperCase()}
+                </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive cursor-pointer">
+            <DropdownMenuContent align="end" className="w-56 p-1">
+              <div className="flex items-center gap-2.5 p-2.5 border-b border-border/50">
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarImage
+                    src={
+                      profile?.avatar_url ||
+                      `https://api.dicebear.com/7.x/initials/svg?seed=${profile?.name || user?.email || "admin"}`
+                    }
+                    alt={profile?.name || "Admin"}
+                    className="object-cover"
+                  />
+                  <AvatarFallback>
+                    {(profile?.name || "AD").substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-semibold text-foreground truncate">
+                    {profile?.name || "Admin"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    {user?.email}
+                  </span>
+                </div>
+              </div>
+              <DropdownMenuItem asChild>
+                <Link
+                  to="/settings"
+                  className="flex items-center cursor-pointer mt-1"
+                >
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => signOut()}
+                className="text-destructive focus:text-destructive cursor-pointer"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>

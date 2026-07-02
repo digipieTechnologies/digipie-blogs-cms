@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, getBlogImageUrl } from "@/lib/utils";
 import type { Blog } from "@/types";
-import { useBlogs, useDeleteBlog } from "@/hooks/useBlogs";
+import { useBlogs, useDeleteBlog, useUpdateBlog } from "@/hooks/useBlogs";
 import { useCategories } from "@/hooks/useCategories";
 import { db } from "@/lib/db";
 import toast from "react-hot-toast";
@@ -39,17 +39,17 @@ export function BlogsList() {
     "date-desc" | "date-asc" | "title-asc" | "title-desc"
   >("date-desc");
   const [deleteBlogId, setDeleteBlogId] = useState<null | any>(null);
+  const [publishBlogId, setPublishBlogId] = useState<null | any>(null);
   const { data: blogs = [], isLoading: blogsLoading } = useBlogs();
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
   const deleteBlogMutation = useDeleteBlog();
+  const updateBlogMutation = useUpdateBlog();
 
   const loading = blogsLoading || categoriesLoading;
 
-  const handleDeleteBlog = async (id: string) => {
-    if (confirm("Are you sure you want to delete this blog?")) {
-      deleteBlogMutation.mutate(id);
-    }
+  const handleDeleteBlog = (id: string) => {
+    setDeleteBlogId(id);
   };
 
   const filteredBlogs = blogs
@@ -240,15 +240,15 @@ export function BlogsList() {
                   <Eye className="mr-2 h-4 w-4" /> Preview
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setPublishBlogId(blog.id)}
+                disabled={blog.status === "published"}
+              >
                 <Globe className="mr-2 h-4 w-4" /> Publish
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Copy className="mr-2 h-4 w-4" /> Duplicate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => handleDeleteBlog(blog.id)}
+                onClick={() => setDeleteBlogId(blog.id)}
                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
               >
                 <Trash className="mr-2 h-4 w-4" /> Delete
@@ -265,31 +265,49 @@ export function BlogsList() {
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0">
-            <img src={getBlogImageUrl(blog.coverImage)} alt="" className="w-full h-full object-cover" />
+            <img
+              src={getBlogImageUrl(blog.coverImage)}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="min-w-0">
-            <Link to={`/blogs/preview/${blog.id}`} className="font-medium hover:text-primary transition-colors cursor-pointer truncate block">
+            <Link
+              to={`/blogs/preview/${blog.id}`}
+              className="font-medium hover:text-primary transition-colors cursor-pointer truncate block"
+            >
               {blog.title}
             </Link>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">
-              {blog.readingTime} read · {new Date(blog.createdAt).toLocaleDateString()}
+              {blog.readingTime} read ·{" "}
+              {new Date(blog.createdAt).toLocaleDateString()}
             </p>
           </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-2 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 -mr-2 -mt-2 shrink-0"
+            >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild>
-              <Link to={`/blogs/${blog.id}`} className="flex items-center w-full">
+              <Link
+                to={`/blogs/${blog.id}`}
+                className="flex items-center w-full"
+              >
                 <Edit className="mr-2 h-4 w-4" /> Edit
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to={`/blogs/preview/${blog.id}`} className="flex items-center w-full">
+              <Link
+                to={`/blogs/preview/${blog.id}`}
+                className="flex items-center w-full"
+              >
                 <Eye className="mr-2 h-4 w-4" /> Preview
               </Link>
             </DropdownMenuItem>
@@ -392,9 +410,6 @@ export function BlogsList() {
                 <DropdownMenuItem onClick={() => setSelectedStatus("draft")}>
                   Draft {selectedStatus === "draft" && " ✓"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSelectedStatus("archived")}>
-                  Archived {selectedStatus === "archived" && " ✓"}
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -495,8 +510,49 @@ export function BlogsList() {
               }}
               className="gap-2"
             >
-              {deleteBlogMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {deleteBlogMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
               Delete
+            </Button>
+          </div>
+        }
+      />
+
+      {/* Publish Modal */}
+      <Modal
+        isOpen={!!publishBlogId}
+        onClose={() => setPublishBlogId(null)}
+        title="Publish Blog Post?"
+        description="Are you sure you want to publish this blog post? It will be publicly visible."
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setPublishBlogId(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={updateBlogMutation.isPending}
+              onClick={async () => {
+                if (publishBlogId) {
+                  try {
+                    await updateBlogMutation.mutateAsync({
+                      id: publishBlogId,
+                      blog: { status: "published" },
+                    });
+                    toast.success("Blog published successfully");
+                  } catch {
+                    toast.error("Failed to publish blog");
+                  } finally {
+                    setPublishBlogId(null);
+                  }
+                }
+              }}
+              className="gap-2"
+            >
+              {updateBlogMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Publish
             </Button>
           </div>
         }

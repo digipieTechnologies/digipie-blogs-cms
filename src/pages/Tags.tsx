@@ -1,172 +1,164 @@
 import { useEffect, useState } from "react";
 import { DataTable, type ColumnDef } from "@/components/ui/data-table";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Plus,
   Search,
-  MoreHorizontal,
   Edit,
   Trash,
   Loader2,
 } from "lucide-react";
 
-import type { Category } from "@/types";
+import type { Tag } from "@/types";
 import {
-  useCategories,
-  useCreateCategory,
-  useUpdateCategory,
-  useDeleteCategory,
-} from "@/hooks/useCategories";
+  useTags,
+  useCreateTagDetailed,
+  useUpdateTag,
+  useDeleteTag,
+} from "@/hooks/useTags";
 import toast from "react-hot-toast";
 import { Modal } from "@/components/ui/modal";
 
-export function Categories() {
+export function Tags() {
   const [search, setSearch] = useState("");
-  const { data: categories = [], isLoading: loading } = useCategories();
+  const { data: tags = [], isLoading: loading } = useTags();
 
-  const createCategoryMutation = useCreateCategory();
-  const updateCategoryMutation = useUpdateCategory();
-  const deleteCategoryMutation = useDeleteCategory();
+  const createTagMutation = useCreateTagDetailed();
+  const updateTagMutation = useUpdateTag();
+  const deleteTagMutation = useDeleteTag();
 
   // Modal states
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
-  const [newCatSlug, setNewCatSlug] = useState("");
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagSlug, setNewTagSlug] = useState("");
 
-  const [editCategory, setEditCategory] = useState<Category | null>(null);
-  const [editCatName, setEditCatName] = useState("");
-  const [editCatSlug, setEditCatSlug] = useState("");
+  const [editTag, setEditTag] = useState<Tag | null>(null);
+  const [editTagName, setEditTagName] = useState("");
+  const [editTagSlug, setEditTagSlug] = useState("");
 
-  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [deleteTagId, setDeleteTagId] = useState<string | null>(null);
 
-  const handleCreateCategory = async () => {
-    if (!newCatName.trim()) {
-      toast.error("Category name is required");
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) {
+      toast.error("Tag name is required");
       return;
     }
     const slugVal =
-      newCatSlug.trim() || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      newTagSlug.trim() || newTagName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-    createCategoryMutation.mutate(
-      { name: newCatName.trim(), slug: slugVal },
+    createTagMutation.mutate(
+      { name: newTagName.trim(), slug: slugVal },
       {
         onSuccess: () => {
-          toast.success("Category created successfully");
+          toast.success("Tag created successfully");
           setCreateModalOpen(false);
-          setNewCatName("");
-          setNewCatSlug("");
+          setNewTagName("");
+          setNewTagSlug("");
         },
         onError: () => {
-          toast.error("Failed to create category");
+          toast.error("Failed to create tag");
         },
       },
     );
   };
 
-  const handleUpdateCategory = async () => {
-    if (!editCategory) return;
-    if (!editCatName.trim()) {
-      toast.error("Category name is required");
+  const handleUpdateTag = async () => {
+    if (!editTag) return;
+    if (!editTagName.trim()) {
+      toast.error("Tag name is required");
       return;
     }
-    const slugVal = editCatSlug.trim() || editCategory.slug;
+    const slugVal = editTagSlug.trim() || editTag.slug;
 
-    updateCategoryMutation.mutate(
+    updateTagMutation.mutate(
       {
-        id: editCategory.id,
-        category: { name: editCatName.trim(), slug: slugVal },
+        id: editTag.id,
+        tag: { name: editTagName.trim(), slug: slugVal },
       },
       {
         onSuccess: () => {
-          toast.success("Category updated successfully");
-          setEditCategory(null);
+          toast.success("Tag updated successfully");
+          setEditTag(null);
         },
         onError: () => {
-          toast.error("Failed to update category");
+          toast.error("Failed to update tag");
         },
       },
     );
   };
 
-  const handleDeleteCategory = async () => {
-    if (!deleteCategoryId) return;
-    deleteCategoryMutation.mutate(deleteCategoryId, {
+  const handleDeleteTag = async () => {
+    if (!deleteTagId) return;
+    deleteTagMutation.mutate(deleteTagId, {
       onSuccess: () => {
-        toast.success("Category deleted successfully");
+        toast.success("Tag deleted successfully");
       },
       onError: () => {
-        toast.error("Failed to delete category");
+        toast.error("Failed to delete tag");
       },
       onSettled: () => {
-        setDeleteCategoryId(null);
+        setDeleteTagId(null);
       },
     });
   };
 
-  const filteredCategories = categories.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
+  const filteredTags = tags.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const columns: ColumnDef<Category>[] = [
+  const columns: ColumnDef<Tag>[] = [
     {
       header: "Name",
       cellClassName: "font-medium",
-      cell: (cat) => cat.name,
+      cell: (tag) => tag.name,
     },
     {
       header: "Slug",
       cellClassName: "text-muted-foreground font-mono text-xs",
-      cell: (cat) => cat.slug,
+      cell: (tag) => tag.slug,
     },
     {
       header: "Blogs",
       headerClassName: "text-center",
       cellClassName: "text-center",
-      cell: (cat) => (
+      cell: (tag) => (
         <span className="inline-flex items-center justify-center bg-primary/10 text-primary rounded-full h-6 min-w-[24px] px-2 text-xs font-semibold">
-          {cat.totalBlogs}
+          {tag.totalBlogs}
         </span>
       ),
     },
     {
       header: "Created",
       cellClassName: "text-muted-foreground",
-      cell: (cat) => new Date(cat.createdAt).toLocaleDateString(),
+      cell: (tag) => new Date(tag.createdAt).toLocaleDateString(),
     },
     {
       header: "Actions",
       headerClassName: "text-right",
       cellClassName: "text-right",
-      cell: (cat) => (
+      cell: (tag) => (
         <div className="flex justify-end gap-2 transition-opacity">
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            asChild
             onClick={() => {
-              setEditCategory(cat);
-              setEditCatName(cat.name);
-              setEditCatSlug(cat.slug);
+              setEditTag(tag);
+              setEditTagName(tag.name);
+              setEditTagSlug(tag.slug);
             }}
           >
-            <span>
-              <Edit className="h-4 w-4" />
-            </span>
+            <Edit className="h-4 w-4" />
           </Button>
-          {!(cat.totalBlogs > 0) && (
+          {!(tag.totalBlogs > 0) && (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              asChild
-              onClick={() => setDeleteCategoryId(cat.id)}
+              onClick={() => setDeleteTagId(tag.id)}
             >
-              <span>
-                <Trash className="h-4 w-4" />
-              </span>
+              <Trash className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -178,9 +170,9 @@ export function Categories() {
     <div className="p-4 md:p-8 mx-auto space-y-4 md:space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Categories</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Tags</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Organize your content with topics.
+            Manage tags to describe and link your content.
           </p>
         </div>
 
@@ -189,7 +181,7 @@ export function Categories() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search categories..."
+              placeholder="Search tags..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 bg-background border-border/60 w-full"
@@ -200,35 +192,35 @@ export function Categories() {
             className="gap-2 shadow-sm shrink-0"
           >
             <Plus className="h-4 w-4" />
-            Add Category
+            Add Tag
           </Button>
         </div>
       </div>
 
       <DataTable
         columns={columns}
-        data={filteredCategories}
+        data={filteredTags}
         loading={loading}
-        loadingMessage="Loading categories..."
-        emptyMessage="No categories found."
+        loadingMessage="Loading tags..."
+        emptyMessage="No tags found."
       />
 
       {/* Create Modal */}
       <Modal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        title="Create Category"
+        title="Create Tag"
         footer={
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleCreateCategory}
-              disabled={createCategoryMutation.isPending}
+              onClick={handleCreateTag}
+              disabled={createTagMutation.isPending}
               className="gap-2"
             >
-              {createCategoryMutation.isPending && (
+              {createTagMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
               Create
@@ -239,12 +231,12 @@ export function Categories() {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">
-              Category Name
+              Tag Name
             </label>
             <Input
-              placeholder="e.g. Tutorials"
-              value={newCatName}
-              onChange={(e) => setNewCatName(e.target.value)}
+              placeholder="e.g. React Native"
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
@@ -252,9 +244,9 @@ export function Categories() {
               Slug (optional)
             </label>
             <Input
-              placeholder="e.g. tutorials"
-              value={newCatSlug}
-              onChange={(e) => setNewCatSlug(e.target.value)}
+              placeholder="e.g. react-native"
+              value={newTagSlug}
+              onChange={(e) => setNewTagSlug(e.target.value)}
             />
           </div>
         </div>
@@ -262,20 +254,20 @@ export function Categories() {
 
       {/* Edit Modal */}
       <Modal
-        isOpen={!!editCategory}
-        onClose={() => setEditCategory(null)}
-        title="Edit Category"
+        isOpen={!!editTag}
+        onClose={() => setEditTag(null)}
+        title="Edit Tag"
         footer={
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setEditCategory(null)}>
+            <Button variant="outline" onClick={() => setEditTag(null)}>
               Cancel
             </Button>
             <Button
-              onClick={handleUpdateCategory}
-              disabled={updateCategoryMutation.isPending}
+              onClick={handleUpdateTag}
+              disabled={updateTagMutation.isPending}
               className="gap-2"
             >
-              {updateCategoryMutation.isPending && (
+              {updateTagMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
               Save Changes
@@ -286,20 +278,20 @@ export function Categories() {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">
-              Category Name
+              Tag Name
             </label>
             <Input
-              placeholder="e.g. Tutorials"
-              value={editCatName}
-              onChange={(e) => setEditCatName(e.target.value)}
+              placeholder="e.g. React Native"
+              value={editTagName}
+              onChange={(e) => setEditTagName(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Slug</label>
             <Input
-              placeholder="e.g. tutorials"
-              value={editCatSlug}
-              onChange={(e) => setEditCatSlug(e.target.value)}
+              placeholder="e.g. react-native"
+              value={editTagSlug}
+              onChange={(e) => setEditTagSlug(e.target.value)}
             />
           </div>
         </div>
@@ -307,22 +299,22 @@ export function Categories() {
 
       {/* Delete Modal */}
       <Modal
-        isOpen={!!deleteCategoryId}
-        onClose={() => setDeleteCategoryId(null)}
-        title="Delete Category?"
-        description="Are you sure you want to delete this category? This action cannot be undone."
+        isOpen={!!deleteTagId}
+        onClose={() => setDeleteTagId(null)}
+        title="Delete Tag?"
+        description="Are you sure you want to delete this tag? This action cannot be undone."
         footer={
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteCategoryId(null)}>
+            <Button variant="outline" onClick={() => setDeleteTagId(null)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDeleteCategory}
-              disabled={deleteCategoryMutation.isPending}
+              onClick={handleDeleteTag}
+              disabled={deleteTagMutation.isPending}
               className="gap-2"
             >
-              {deleteCategoryMutation.isPending && (
+              {deleteTagMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
               Delete

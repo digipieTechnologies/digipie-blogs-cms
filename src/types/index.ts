@@ -32,3 +32,11 @@ export interface Media {
   size: string;
   uploadedAt: string;
 }
+
+export interface Tag {
+  id: string;
+  name: string;
+  slug: string;
+  totalBlogs: number;
+  createdAt: string;
+}

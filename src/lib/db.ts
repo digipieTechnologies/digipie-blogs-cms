@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Blog, Category } from "@/types";
+import type { Blog, Category, Tag } from "@/types";
 import { mockBlogs as initialMockBlogs, mockCategories as initialMockCategories } from "@/data/mock";
 
 // In-memory data store with LocalStorage persistence for mock data mode
@@ -34,6 +34,38 @@ const getLocalCategories = (): Category[] => {
 const saveLocalCategories = (categories: Category[]) => {
   try {
     localStorage.setItem("digipie_categories", JSON.stringify(categories));
+  } catch (e) {}
+};
+
+const getLocalTags = (): Tag[] => {
+  try {
+    const saved = localStorage.getItem("digipie_tags");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  
+  const blogs = getLocalBlogs();
+  const tagsSet = new Set<string>();
+  blogs.forEach(b => b.tags?.forEach(t => tagsSet.add(t)));
+  const defaultList = tagsSet.size > 0 ? Array.from(tagsSet) : [];
+  
+  const initialTags = defaultList.map((name, i) => ({
+    id: `tag-${i}`,
+    name,
+    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    totalBlogs: blogs.filter(b => b.tags?.includes(name)).length,
+    createdAt: new Date().toISOString()
+  }));
+  
+  try {
+    localStorage.setItem("digipie_tags", JSON.stringify(initialTags));
+  } catch (e) {}
+  
+  return initialTags;
+};
+
+const saveLocalTags = (tags: Tag[]) => {
+  try {
+    localStorage.setItem("digipie_tags", JSON.stringify(tags));
   } catch (e) {}
 };
 
@@ -459,6 +491,186 @@ export const db = {
       const list = getLocalCategories();
       const filtered = list.filter((c) => c.id !== id);
       saveLocalCategories(filtered);
+    }
+  },
+
+  async getTags(): Promise<string[]> {
+    if (!isSupabaseConfigured()) {
+      const blogs = getLocalBlogs();
+      const tagsSet = new Set<string>();
+      blogs.forEach(b => b.tags?.forEach(t => tagsSet.add(t)));
+      if (tagsSet.size === 0) {
+        return ["React", "TypeScript", "JavaScript", "CSS", "HTML", "NextJS", "UI/UX", "Tailwind"];
+      }
+      return Array.from(tagsSet);
+    }
+    try {
+      const { data, error } = await supabase
+        .from("tags")
+        .select("name")
+        .order("name");
+      if (error) throw error;
+      return (data || []).map((t: any) => t.name);
+    } catch (err) {
+      console.warn("Supabase tags fetch failed, using local fallback:", err);
+      const blogs = getLocalBlogs();
+      const tagsSet = new Set<string>();
+      blogs.forEach(b => b.tags?.forEach(t => tagsSet.add(t)));
+      return Array.from(tagsSet);
+    }
+  },
+
+  async createTag(name: string): Promise<string> {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    if (!isSupabaseConfigured()) {
+      return name;
+    }
+    try {
+      // Check if tag already exists (case-insensitive)
+      const { data: existingTag } = await supabase
+        .from("tags")
+        .select("name")
+        .ilike("name", name)
+        .maybeSingle();
+        
+      if (existingTag) {
+        return existingTag.name;
+      }
+      
+      const { data, error } = await supabase
+        .from("tags")
+        .insert({ name, slug })
+        .select("name")
+        .single();
+        
+      if (error) throw error;
+      return data.name;
+    } catch (err) {
+      console.warn("Supabase tag insertion failed:", err);
+      return name;
+    }
+  },
+
+  async getTagsDetailed(): Promise<Tag[]> {
+    if (!isSupabaseConfigured()) {
+      return getLocalTags();
+    }
+    try {
+      const { data, error } = await supabase
+        .from("tags")
+        .select(`
+          *,
+          blog_tags (
+            blog_id
+          )
+        `)
+        .order("name");
+      if (error) throw error;
+      return (data || []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        totalBlogs: t.blog_tags?.length || 0,
+        createdAt: t.created_at || t.createdAt,
+      }));
+    } catch (err) {
+      console.warn("Supabase detailed tags fetch failed, using local fallback:", err);
+      return getLocalTags();
+    }
+  },
+
+  async createTagDetailed(tag: Omit<Tag, "id" | "totalBlogs" | "createdAt">): Promise<Tag> {
+    if (!isSupabaseConfigured()) {
+      const newTag: Tag = {
+        ...tag,
+        id: Math.random().toString(36).substring(2, 9),
+        totalBlogs: 0,
+        createdAt: new Date().toISOString(),
+      };
+      const list = getLocalTags();
+      list.push(newTag);
+      saveLocalTags(list);
+      return newTag;
+    }
+    try {
+      const slug = tag.slug || tag.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const { data, error } = await supabase
+        .from("tags")
+        .insert({ name: tag.name, slug })
+        .select()
+        .single();
+      if (error) throw error;
+      return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        totalBlogs: 0,
+        createdAt: data.created_at || data.createdAt,
+      };
+    } catch (err) {
+      console.warn("Supabase tag creation detailed failed, using local fallback:", err);
+      const newTag: Tag = {
+        ...tag,
+        id: Math.random().toString(36).substring(2, 9),
+        totalBlogs: 0,
+        createdAt: new Date().toISOString(),
+      };
+      const list = getLocalTags();
+      list.push(newTag);
+      saveLocalTags(list);
+      return newTag;
+    }
+  },
+
+  async updateTag(id: string, tag: Partial<Tag>): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const list = getLocalTags();
+      const idx = list.findIndex((t) => t.id === id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...tag } as Tag;
+        saveLocalTags(list);
+      }
+      return;
+    }
+    try {
+      const updateData: any = {};
+      if (tag.name !== undefined) updateData.name = tag.name;
+      if (tag.slug !== undefined) updateData.slug = tag.slug;
+      
+      const { error } = await supabase
+        .from("tags")
+        .update(updateData)
+        .eq("id", id);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Supabase tag update failed, using local fallback:", err);
+      const list = getLocalTags();
+      const idx = list.findIndex((t) => t.id === id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...tag } as Tag;
+        saveLocalTags(list);
+      }
+    }
+  },
+
+  async deleteTag(id: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const list = getLocalTags();
+      const filtered = list.filter((t) => t.id !== id);
+      saveLocalTags(filtered);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("tags")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Supabase tag delete failed, using local fallback:", err);
+      const list = getLocalTags();
+      const filtered = list.filter((t) => t.id !== id);
+      saveLocalTags(filtered);
     }
   },
 };

@@ -20,11 +20,17 @@ import {
   CheckSquare,
   Minus,
   Loader2,
+  Eye,
+  EyeOff,
+  Save,
+  Check,
+  X,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BlogDetailPreview } from "@/components/BlogDetailPreview";
+import { MultiDropdown } from "@/components/ui/MultiDropdown";
 import { useBlog, useCreateBlog, useUpdateBlog } from "@/hooks/useBlogs";
-import { useCategories } from "@/hooks/useCategories";
+import { useCategories, useCreateCategory } from "@/hooks/useCategories";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import {
@@ -40,6 +46,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import toast from "react-hot-toast";
 import { db } from "@/lib/db";
+
+const PREDEFINED_TAGS = [
+  "React",
+  "TypeScript",
+  "JavaScript",
+  "CSS",
+  "HTML",
+  "NextJS",
+  "UI/UX",
+  "Tailwind",
+  "Database",
+  "Supabase",
+  "Design",
+  "Product",
+  "Engineering",
+  "Tutorial",
+];
 
 const formatHtmlString = (html: string): string => {
   let formatted = "";
@@ -114,11 +137,60 @@ export function BlogEditor() {
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [tagsString, setTagsString] = useState("");
+
   const [status, setStatus] = useState<"draft" | "published" | "archived">(
     "draft",
   );
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
+
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Fetch tags from DB
+    db.getTags().then((tags) => {
+      const merged = Array.from(new Set([...PREDEFINED_TAGS, ...tags]));
+      setAvailableTags(merged);
+    });
+  }, []);
+
+  const handleAddCustomTag = async (tagText: string) => {
+    const trimmed = tagText.trim();
+    if (!trimmed) return;
+
+    const currentTags = tagsString
+      ? tagsString
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (!currentTags.includes(trimmed)) {
+      // Optimistically add to current selection
+      const newTags = [...currentTags, trimmed];
+      setTagsString(newTags.join(", "));
+
+      // Add to available tags options
+      setAvailableTags((prev) => Array.from(new Set([...prev, trimmed])));
+
+      try {
+        const persistedName = await db.createTag(trimmed);
+        if (persistedName && persistedName !== trimmed) {
+          // Reconcile if DB returned a formatted/fixed name
+          const updatedSelection = newTags.map((t) =>
+            t === trimmed ? persistedName : t,
+          );
+          setTagsString(updatedSelection.join(", "));
+          setAvailableTags((prev) =>
+            Array.from(
+              new Set([...prev.filter((t) => t !== trimmed), persistedName]),
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to create tag in DB:", err);
+      }
+    }
+  };
 
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
@@ -128,6 +200,35 @@ export function BlogEditor() {
 
   const createBlogMutation = useCreateBlog();
   const updateBlogMutation = useUpdateBlog();
+  const createCategoryMutation = useCreateCategory();
+
+  const handleAddCustomCategory = async (catText: string) => {
+    const trimmed = catText.trim();
+    if (!trimmed) return;
+
+    const currentCats = category
+      ? category
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
+    if (!currentCats.includes(trimmed)) {
+      // Optimistically add to selection
+      const newCats = [...currentCats, trimmed];
+      setCategory(newCats.join(", "));
+
+      try {
+        await createCategoryMutation.mutateAsync({
+          name: trimmed,
+          slug: trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        });
+        toast.success(`Category "${trimmed}" created successfully`);
+      } catch (err) {
+        console.error("Failed to create category:", err);
+        toast.error("Failed to create category");
+      }
+    }
+  };
 
   const loading = isEditing
     ? categoriesLoading || blogLoading
@@ -355,6 +456,7 @@ export function BlogEditor() {
         {
           onSuccess: () => {
             toast.success("Blog updated successfully!");
+            navigate("/blogs");
           },
           onError: () => {
             toast.error("Failed to update blog.");
@@ -363,9 +465,9 @@ export function BlogEditor() {
       );
     } else {
       createBlogMutation.mutate(blogData, {
-        onSuccess: (created) => {
+        onSuccess: () => {
           toast.success("Blog created successfully!");
-          navigate(`/blogs/${created.id}`);
+          navigate("/blogs");
         },
         onError: () => {
           toast.error("Failed to create blog.");
@@ -524,7 +626,7 @@ export function BlogEditor() {
         {/* Editor Canvas */}
         <div className="flex-1 bg-[#8080800d] overflow-y-auto relative">
           {/* Editor Topbar */}
-          <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 md:px-6 backdrop-blur-xl">
+          <div className="sticky top-0 z-10 flex py-2 md:py-0 md:h-14 items-center  justify-between border-b border-border/50 bg-background/80 px-4 md:px-6 backdrop-blur-xl">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -542,20 +644,34 @@ export function BlogEditor() {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground mr-2">
-                Saved just now
-              </span>
+            <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 variant={isPreviewMode ? "secondary" : "outline"}
                 size="sm"
-                className="bg-background"
+                className="bg-background h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
                 onClick={() => setIsPreviewMode(!isPreviewMode)}
+                title={isPreviewMode ? "Edit" : "Preview"}
               >
-                {isPreviewMode ? "Edit" : "Preview"}
+                {isPreviewMode ? (
+                  <>
+                    <EyeOff className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Edit</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Preview</span>
+                  </>
+                )}
               </Button>
-              <Button onClick={handleSave} size="sm">
-                Save / Publish
+              <Button
+                onClick={handleSave}
+                size="sm"
+                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
+                title="Save / Publish"
+              >
+                <Save className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Save / Publish</span>
               </Button>
             </div>
           </div>
@@ -597,12 +713,23 @@ export function BlogEditor() {
               </div>
 
               {/* Title Input */}
-              <input
-                type="text"
+              <textarea
                 placeholder="Post title..."
-                className="w-full text-5xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-8 placeholder:font-bold"
+                className="w-full text-4xl md:text-5xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-8 placeholder:font-bold resize-none overflow-hidden min-h-[60px]"
+                rows={1}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                ref={(el) => {
+                  if (el) {
+                    // Set height on initial render/value change
+                    el.style.height = "auto";
+                    el.style.height = `${el.scrollHeight}px`;
+                  }
+                }}
               />
 
               {/* Sticky Toolbar Mock */}
@@ -850,38 +977,39 @@ export function BlogEditor() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Category</label>
-              <select
+              <MultiDropdown
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {categories.length > 0 ? (
-                  categories.map((cat) => (
-                    <option key={cat.slug} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Product">Product</option>
-                    <option value="Design">Design</option>
-                  </>
-                )}
-              </select>
+                onChange={setCategory}
+                options={
+                  categories.length > 0
+                    ? categories.map((c) => c.name)
+                    : ["Engineering", "Product", "Design"]
+                }
+                placeholder="Select categories..."
+                onAddOption={handleAddCustomCategory}
+                addOptionLabel="Add category"
+              />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
+              <label className="text-sm font-medium mr-5">Status</label>
+              <div className="w-full">
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="w-full">
+                    <Button variant="outline" className="w-full !text-start">
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                    <DropdownMenuItem onClick={() => setStatus("draft")}>
+                      Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setStatus("published")}>
+                      Published
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -896,10 +1024,13 @@ export function BlogEditor() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Tags</label>
-              <Input
-                placeholder="Add tags separated by comma"
+              <MultiDropdown
                 value={tagsString}
-                onChange={(e) => setTagsString(e.target.value)}
+                onChange={setTagsString}
+                options={availableTags}
+                placeholder="Select or search tags..."
+                onAddOption={handleAddCustomTag}
+                addOptionLabel="Add tag"
               />
             </div>
 

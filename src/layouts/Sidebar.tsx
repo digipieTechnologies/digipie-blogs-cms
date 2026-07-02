@@ -1,11 +1,18 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileText, FolderTree, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  FolderTree,
+  Tag,
+  Settings,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Blogs", href: "/blogs", icon: FileText },
   { name: "Categories", href: "/categories", icon: FolderTree },
+  { name: "Tags", href: "/tags", icon: Tag },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
