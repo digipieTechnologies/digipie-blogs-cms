@@ -17,7 +17,7 @@ export function Dashboard() {
   const draftCount = blogs.filter((b) => b.status === "draft").length;
 
   return (
-    <div className="p-8 mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="p-4 md:p-8 mx-auto space-y-6 md:space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
@@ -35,7 +35,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="subtle-shadow border-border/50 bg-background/50 backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Blogs</CardTitle>
@@ -108,8 +108,8 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 subtle-shadow border-border/50 bg-background/50 backdrop-blur-sm">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+        <Card className="lg:col-span-4 subtle-shadow border-border/50 bg-background/50 backdrop-blur-sm overflow-hidden">
           <CardHeader>
             <CardTitle>Recent Blogs</CardTitle>
           </CardHeader>

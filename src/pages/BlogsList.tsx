@@ -260,11 +260,80 @@ export function BlogsList() {
     },
   ];
 
+  const renderMobileCard = (blog: Blog) => (
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0">
+            <img src={getBlogImageUrl(blog.coverImage)} alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="min-w-0">
+            <Link to={`/blogs/preview/${blog.id}`} className="font-medium hover:text-primary transition-colors cursor-pointer truncate block">
+              {blog.title}
+            </Link>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+              {blog.readingTime} read · {new Date(blog.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-2 shrink-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link to={`/blogs/${blog.id}`} className="flex items-center w-full">
+                <Edit className="mr-2 h-4 w-4" /> Edit
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={`/blogs/preview/${blog.id}`} className="flex items-center w-full">
+                <Eye className="mr-2 h-4 w-4" /> Preview
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Globe className="mr-2 h-4 w-4" /> Publish
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Copy className="mr-2 h-4 w-4" /> Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setDeleteBlogId(blog.id)}
+              className="text-destructive focus:text-destructive focus:bg-destructive/10"
+            >
+              <Trash className="mr-2 h-4 w-4" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
+          {blog.category}
+        </span>
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset",
+            blog.status === "published"
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+              : blog.status === "draft"
+                ? "bg-amber-50 text-amber-700 ring-amber-600/20"
+                : "bg-slate-50 text-slate-700 ring-slate-600/20",
+          )}
+        >
+          {blog.status}
+        </span>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="p-8 mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 md:p-8 mx-auto space-y-4 md:space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 flex-1 w-full">
+          <div className="relative flex-1 min-w-[200px] w-full max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
@@ -276,7 +345,7 @@ export function BlogsList() {
               }
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="gap-2 bg-background">
@@ -363,7 +432,7 @@ export function BlogsList() {
 
         <Button
           asChild
-          className="gap-2 shadow-sm shrink-0 h-10 w-full xl:w-auto"
+          className="gap-2 shrink-0 w-full sm:w-auto mt-2 xl:mt-0"
         >
           <Link to="/blogs/new">
             <Plus className="h-4 w-4" />
@@ -378,6 +447,7 @@ export function BlogsList() {
         loading={loading}
         loadingMessage="Loading blogs..."
         emptyMessage="No blogs found matching your search."
+        renderMobileCard={renderMobileCard}
         footer={
           <>
             {!loading && visibleCount < totalItems && (

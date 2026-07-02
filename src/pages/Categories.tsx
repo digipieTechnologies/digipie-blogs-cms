@@ -180,8 +180,8 @@ export function Categories() {
   ];
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-4 md:space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Categories</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -189,22 +189,22 @@ export function Categories() {
           </p>
         </div>
 
-      <div className="flex justify-end items-center gap-4">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search categories..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 bg-background border-border/60"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search categories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 bg-background border-border/60 w-full"
+            />
+          </div>
+          <Button onClick={handleCreateCategory} className="gap-2 shadow-sm shrink-0">
+            <Plus className="h-4 w-4" />
+            Add Category
+          </Button>
         </div>
-      </div>
-        <Button onClick={handleCreateCategory} className="gap-2 shadow-sm">
-          <Plus className="h-4 w-4" />
-          Add Category
-        </Button>
       </div>
 
 

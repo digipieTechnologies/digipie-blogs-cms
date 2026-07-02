@@ -518,13 +518,13 @@ export function BlogEditor() {
   };
 
   return (
-    <div className="flex flex-col ">
+    <div className="flex flex-col lg:h-screen min-h-screen">
       {/* Main Editor Area */}
-      <div className="flex-1 flex   max-h-screen">
+      <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
         {/* Editor Canvas */}
-        <div className="flex-1 bg-[#8080800d] overflow-y-auto">
+        <div className="flex-1 bg-[#8080800d] overflow-y-auto relative">
           {/* Editor Topbar */}
-          <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-6 backdrop-blur-xl">
+          <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 md:px-6 backdrop-blur-xl">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -566,7 +566,7 @@ export function BlogEditor() {
               onBackToEditor={() => setIsPreviewMode(false)}
             />
           ) : (
-            <div className="max-w-4xl mx-auto px-16 py-12">
+            <div className="max-w-4xl mx-auto px-4 sm:px-8 md:px-16 py-8 md:py-12">
               {/* Cover Image */}
               <div
                 onClick={handleCoverImageClick}
@@ -606,7 +606,7 @@ export function BlogEditor() {
               />
 
               {/* Sticky Toolbar Mock */}
-              <div className="sticky top-6 z-20 mb-8 flex items-center gap-1 rounded-lg border border-border/50 bg-background/95 p-1 shadow-sm backdrop-blur">
+              <div className="sticky top-14 sm:top-20 z-20 mb-8 flex flex-wrap items-center gap-1 rounded-lg border border-border/50 bg-background/95 p-1 shadow-sm backdrop-blur">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -833,7 +833,7 @@ export function BlogEditor() {
         </div>
 
         {/* Settings Sidebar */}
-        <div className="w-80 h-full border-l border-border/50 bg-background/30 p-6  overflow-auto lg:block">
+        <div className="w-full lg:w-80 h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-border/50 bg-background/30 p-6 overflow-y-visible lg:overflow-y-auto shrink-0">
           <h3 className="font-medium mb-6 flex items-center gap-2">
             <LayoutPanelLeft className="h-4 w-4" /> Post Settings
           </h3>
