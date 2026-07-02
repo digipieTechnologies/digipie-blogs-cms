@@ -3,7 +3,14 @@ import { DataTable, type ColumnDef } from "@/components/ui/data-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, MoreHorizontal, Edit, Trash } from "lucide-react";
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  Edit,
+  Trash,
+  Loader2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,36 +18,96 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Category } from "@/types";
-import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from "@/hooks/useCategories";
+import {
+  useCategories,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+} from "@/hooks/useCategories";
+import toast from "react-hot-toast";
+import { Modal } from "@/components/ui/modal";
 
 export function Categories() {
   const [search, setSearch] = useState("");
   const { data: categories = [], isLoading: loading } = useCategories();
-  
+
   const createCategoryMutation = useCreateCategory();
   const updateCategoryMutation = useUpdateCategory();
   const deleteCategoryMutation = useDeleteCategory();
 
+  // Modal states
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatSlug, setNewCatSlug] = useState("");
+
+  const [editCategory, setEditCategory] = useState<Category | null>(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [editCatSlug, setEditCatSlug] = useState("");
+
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+
   const handleCreateCategory = async () => {
-    const name = prompt("Enter category name:");
-    if (!name) return;
-    const slug = prompt("Enter category slug (optional):") || name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    
-    createCategoryMutation.mutate({ name, slug });
-  };
-
-  const handleUpdateCategory = async (cat: Category) => {
-    const name = prompt("Enter new category name:", cat.name);
-    if (!name) return;
-    const slug = prompt("Enter new category slug:", cat.slug) || cat.slug;
-
-    updateCategoryMutation.mutate({ id: cat.id, category: { name, slug } });
-  };
-
-  const handleDeleteCategory = async (id: string) => {
-    if (confirm("Are you sure you want to delete this category?")) {
-      deleteCategoryMutation.mutate(id);
+    if (!newCatName.trim()) {
+      toast.error("Category name is required");
+      return;
     }
+    const slugVal =
+      newCatSlug.trim() || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    createCategoryMutation.mutate(
+      { name: newCatName.trim(), slug: slugVal },
+      {
+        onSuccess: () => {
+          toast.success("Category created successfully");
+          setCreateModalOpen(false);
+          setNewCatName("");
+          setNewCatSlug("");
+        },
+        onError: () => {
+          toast.error("Failed to create category");
+        },
+      },
+    );
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editCategory) return;
+    if (!editCatName.trim()) {
+      toast.error("Category name is required");
+      return;
+    }
+    const slugVal = editCatSlug.trim() || editCategory.slug;
+
+    updateCategoryMutation.mutate(
+      {
+        id: editCategory.id,
+        category: { name: editCatName.trim(), slug: slugVal },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Category updated successfully");
+          setEditCategory(null);
+        },
+        onError: () => {
+          toast.error("Failed to update category");
+        },
+      },
+    );
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteCategoryId) return;
+    deleteCategoryMutation.mutate(deleteCategoryId, {
+      onSuccess: () => {
+        toast.success("Category deleted successfully");
+      },
+      onError: () => {
+        toast.error("Failed to delete category");
+      },
+      onSettled: () => {
+        setDeleteCategoryId(null);
+      },
+    });
   };
 
   const filteredCategories = categories.filter((c) =>
@@ -78,28 +145,36 @@ export function Categories() {
       headerClassName: "text-right",
       cellClassName: "text-right",
       cell: (cat) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <div className="flex justify-end gap-2 transition-opacity">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            asChild
+            onClick={() => {
+              setEditCategory(cat);
+              setEditCatName(cat.name);
+              setEditCatSlug(cat.slug);
+            }}
+          >
+            <span>
+              <Edit className="h-4 w-4" />
+            </span>
+          </Button>
+          {!(cat.totalBlogs > 0) && (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              asChild
+              onClick={() => setDeleteCategoryId(cat.id)}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <span>
+                <Trash className="h-4 w-4" />
+              </span>
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleUpdateCategory(cat)}>
-              <Edit className="mr-2 h-4 w-4" /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleDeleteCategory(cat.id)}
-              className="text-destructive focus:text-destructive focus:bg-destructive/10"
-            >
-              <Trash className="mr-2 h-4 w-4" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          )}
+        </div>
       ),
     },
   ];
@@ -107,12 +182,12 @@ export function Categories() {
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        {/* <div>
+        <div>
           <h2 className="text-2xl font-semibold tracking-tight">Categories</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Organize your content with topics.
           </p>
-        </div> */}
+        </div>
 
       <div className="flex justify-end items-center gap-4">
         <div className="relative">
@@ -139,6 +214,124 @@ export function Categories() {
         loading={loading}
         loadingMessage="Loading categories..."
         emptyMessage="No categories found."
+      />
+
+      {/* Create Modal */}
+      <Modal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        title="Create Category"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateCategory}
+              disabled={createCategoryMutation.isPending}
+              className="gap-2"
+            >
+              {createCategoryMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Create
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">
+              Category Name
+            </label>
+            <Input
+              placeholder="e.g. Tutorials"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground font-normal">
+              Slug (optional)
+            </label>
+            <Input
+              placeholder="e.g. tutorials"
+              value={newCatSlug}
+              onChange={(e) => setNewCatSlug(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        isOpen={!!editCategory}
+        onClose={() => setEditCategory(null)}
+        title="Edit Category"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setEditCategory(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateCategory}
+              disabled={updateCategoryMutation.isPending}
+              className="gap-2"
+            >
+              {updateCategoryMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Save Changes
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">
+              Category Name
+            </label>
+            <Input
+              placeholder="e.g. Tutorials"
+              value={editCatName}
+              onChange={(e) => setEditCatName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Slug</label>
+            <Input
+              placeholder="e.g. tutorials"
+              value={editCatSlug}
+              onChange={(e) => setEditCatSlug(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Modal */}
+      <Modal
+        isOpen={!!deleteCategoryId}
+        onClose={() => setDeleteCategoryId(null)}
+        title="Delete Category?"
+        description="Are you sure you want to delete this category? This action cannot be undone."
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteCategoryId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteCategory}
+              disabled={deleteCategoryMutation.isPending}
+              className="gap-2"
+            >
+              {deleteCategoryMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Delete
+            </Button>
+          </div>
+        }
       />
     </div>
   );

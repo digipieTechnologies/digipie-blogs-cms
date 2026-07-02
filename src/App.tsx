@@ -7,10 +7,32 @@ import { BlogPreview } from "@/pages/BlogPreview";
 import { Categories } from "@/pages/Categories";
 import { Settings } from "@/pages/Settings";
 import { Login } from "@/pages/Login";
+import { Toaster } from "react-hot-toast";
 
 export default function App() {
   return (
     <BrowserRouter>
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          duration: 3500,
+          style: {
+            background: "hsl(224 71% 4%)",
+            color: "hsl(213 31% 91%)",
+            border: "1px solid hsl(216 34% 17%)",
+            borderRadius: "10px",
+            fontSize: "14px",
+            fontFamily: "inherit",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          },
+          success: {
+            iconTheme: { primary: "#4ade80", secondary: "hsl(224 71% 4%)" },
+          },
+          error: {
+            iconTheme: { primary: "#f87171", secondary: "hsl(224 71% 4%)" },
+          },
+        }}
+      />
       <Routes>
         <Route path="/login" element={<Login />} />
         

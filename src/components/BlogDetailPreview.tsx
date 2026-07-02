@@ -213,16 +213,6 @@ export function BlogDetailPreview({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-dark via-navy-dark/60 to-transparent" />
         <div className="relative z-10 max-w-425 mx-auto px-6 md:px-8 lg:px-24 pt-14 pb-12 sm:pt-20 sm:pb-16">
-          {/* Back to Editor Link */}
-          {onBackToEditor && (
-            <button
-              onClick={onBackToEditor}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white/60 hover:text-white transition-colors mb-8"
-            >
-              ← Back to Editor
-            </button>
-          )}
-
           {/* Meta row */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             <span className="text-[13px] font-semibold text-orange">
