@@ -25,10 +25,19 @@ import {
   Save,
   Check,
   X,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Trash2,
+  Video,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BlogDetailPreview } from "@/components/BlogDetailPreview";
 import { MultiDropdown } from "@/components/ui/MultiDropdown";
+import { Modal } from "@/components/ui/modal";
 import { useBlog, useCreateBlog, useUpdateBlog } from "@/hooks/useBlogs";
 import { useCategories, useCreateCategory } from "@/hooks/useCategories";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,23 +56,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import toast from "react-hot-toast";
 import { db } from "@/lib/db";
-
-const PREDEFINED_TAGS = [
-  "React",
-  "TypeScript",
-  "JavaScript",
-  "CSS",
-  "HTML",
-  "NextJS",
-  "UI/UX",
-  "Tailwind",
-  "Database",
-  "Supabase",
-  "Design",
-  "Product",
-  "Engineering",
-  "Tutorial",
-];
 
 const formatHtmlString = (html: string): string => {
   let formatted = "";
@@ -121,7 +113,7 @@ export function BlogEditor() {
   const [coverImage, setCoverImage] = useState("");
   const [isHtmlMode, setIsHtmlMode] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [category, setCategory] = useState("Engineering");
+  const [category, setCategory] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [tagsString, setTagsString] = useState("");
@@ -134,10 +126,352 @@ export function BlogEditor() {
 
   const [availableTags, setAvailableTags] = useState<string[]>([]);
 
+  const [activeMedia, setActiveMedia] = useState<HTMLElement | null>(null);
+  const [savedRange, setSavedRange] = useState<Range | null>(null);
+
+  // Link Insertion States
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkText, setLinkText] = useState("");
+
+  // Video Insertion States
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoType, setVideoType] = useState<"youtube" | "file">("youtube");
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [mediaRect, setMediaRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  const updateActiveMediaRect = () => {
+    if (!activeMedia || !editorRef.current) {
+      setMediaRect(null);
+      return;
+    }
+    const editorBounds = editorRef.current.getBoundingClientRect();
+    const mediaBounds = activeMedia.getBoundingClientRect();
+
+    setMediaRect({
+      top: mediaBounds.top - editorBounds.top + editorRef.current.scrollTop,
+      left: mediaBounds.left - editorBounds.left + editorRef.current.scrollLeft,
+      width: mediaBounds.width,
+      height: mediaBounds.height,
+    });
+  };
+
+  useEffect(() => {
+    if (!activeMedia) return;
+    updateActiveMediaRect();
+
+    window.addEventListener("resize", updateActiveMediaRect);
+    const editorEl = editorRef.current;
+    if (editorEl) {
+      editorEl.addEventListener("scroll", updateActiveMediaRect);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateActiveMediaRect);
+      if (editorEl) {
+        editorEl.removeEventListener("scroll", updateActiveMediaRect);
+      }
+    };
+  }, [activeMedia]);
+
+  const [activeTable, setActiveTable] = useState<HTMLTableElement | null>(null);
+  const [tableRect, setTableRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  const updateActiveTableRect = () => {
+    if (!activeTable || !editorRef.current) {
+      setTableRect(null);
+      return;
+    }
+    const editorBounds = editorRef.current.getBoundingClientRect();
+    const tableBounds = activeTable.getBoundingClientRect();
+
+    setTableRect({
+      top: tableBounds.top - editorBounds.top + editorRef.current.scrollTop,
+      left: tableBounds.left - editorBounds.left + editorRef.current.scrollLeft,
+      width: tableBounds.width,
+      height: tableBounds.height,
+    });
+  };
+
+  useEffect(() => {
+    if (!activeTable) return;
+    updateActiveTableRect();
+
+    window.addEventListener("resize", updateActiveTableRect);
+    const editorEl = editorRef.current;
+    if (editorEl) {
+      editorEl.addEventListener("scroll", updateActiveTableRect);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateActiveTableRect);
+      if (editorEl) {
+        editorEl.removeEventListener("scroll", updateActiveTableRect);
+      }
+    };
+  }, [activeTable]);
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (editorRef.current && editorRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === "IMG" ||
+          target.tagName === "VIDEO" ||
+          target.tagName === "IFRAME"
+        ) {
+          setActiveMedia(target);
+          setActiveTable(null);
+          return;
+        }
+
+        const table = target.closest("table");
+        if (table) {
+          setActiveTable(table);
+          setActiveMedia(null);
+          return;
+        }
+      }
+
+      const clickedElement = e.target as HTMLElement;
+      if (
+        clickedElement.closest(".image-control-overlay") ||
+        clickedElement.closest(".table-control-overlay") ||
+        clickedElement.tagName === "IMG" ||
+        clickedElement.tagName === "VIDEO" ||
+        clickedElement.tagName === "IFRAME" ||
+        clickedElement.closest("table")
+      ) {
+        return;
+      }
+
+      setActiveMedia(null);
+      setActiveTable(null);
+    };
+
+    document.addEventListener("click", handleGlobalClick);
+    return () => {
+      document.removeEventListener("click", handleGlobalClick);
+    };
+  }, []);
+
+  const addRow = (direction: "above" | "below") => {
+    if (!activeTable) return;
+    const rows = Array.from(activeTable.rows);
+    if (rows.length === 0) return;
+
+    const colsCount = rows[0].cells.length;
+    const newRow = document.createElement("tr");
+    for (let i = 0; i < colsCount; i++) {
+      const cell = document.createElement("td");
+      cell.className = "px-4 py-2 text-sm border";
+      cell.innerHTML = "New cell";
+      newRow.appendChild(cell);
+    }
+
+    const tbody = activeTable.querySelector("tbody") || activeTable;
+    tbody.appendChild(newRow);
+
+    setTimeout(updateActiveTableRect, 0);
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
+  };
+
+  const addColumn = () => {
+    if (!activeTable) return;
+    const rows = Array.from(activeTable.rows);
+    if (rows.length === 0) return;
+
+    rows.forEach((row, index) => {
+      const cell = document.createElement(index === 0 ? "th" : "td");
+      cell.className =
+        index === 0
+          ? "px-4 py-2 text-left text-xs font-semibold text-muted-foreground border bg-muted/50"
+          : "px-4 py-2 text-sm border";
+      cell.innerHTML = index === 0 ? `Col ${row.cells.length + 1}` : "New cell";
+      row.appendChild(cell);
+    });
+
+    setTimeout(updateActiveTableRect, 0);
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
+  };
+
+  const deleteRow = () => {
+    if (!activeTable) return;
+    const rows = Array.from(activeTable.rows);
+    if (rows.length <= 1) {
+      activeTable.remove();
+      setActiveTable(null);
+    } else {
+      rows[rows.length - 1].remove();
+      setTimeout(updateActiveTableRect, 0);
+    }
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
+  };
+
+  const deleteColumn = () => {
+    if (!activeTable) return;
+    const rows = Array.from(activeTable.rows);
+    if (rows.length === 0) return;
+    const colsCount = rows[0].cells.length;
+    if (colsCount <= 1) {
+      activeTable.remove();
+      setActiveTable(null);
+    } else {
+      rows.forEach((row) => {
+        if (row.cells.length > 0) {
+          row.cells[row.cells.length - 1].remove();
+        }
+      });
+      setTimeout(updateActiveTableRect, 0);
+    }
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
+  };
+
+  const moveMedia = (direction: "up" | "down") => {
+    if (!activeMedia || !editorRef.current) return;
+
+    let blockNode: HTMLElement | null = activeMedia;
+    while (blockNode && blockNode.parentElement !== editorRef.current) {
+      blockNode = blockNode.parentElement;
+    }
+
+    if (!blockNode) return;
+
+    const parent = editorRef.current;
+    if (direction === "up") {
+      const prev = blockNode.previousElementSibling;
+      if (prev) {
+        parent.insertBefore(blockNode, prev);
+      }
+    } else {
+      const next = blockNode.nextElementSibling;
+      if (next) {
+        parent.insertBefore(blockNode, next.nextElementSibling);
+      }
+    }
+
+    setTimeout(updateActiveMediaRect, 50);
+    setContent(parent.innerHTML);
+  };
+
+  const moveTable = (direction: "up" | "down") => {
+    if (!activeTable || !editorRef.current) return;
+
+    let blockNode: HTMLElement | null = activeTable;
+    while (blockNode && blockNode.parentElement !== editorRef.current) {
+      blockNode = blockNode.parentElement;
+    }
+
+    if (!blockNode) return;
+
+    const parent = editorRef.current;
+    if (direction === "up") {
+      const prev = blockNode.previousElementSibling;
+      if (prev) {
+        parent.insertBefore(blockNode, prev);
+      }
+    } else {
+      const next = blockNode.nextElementSibling;
+      if (next) {
+        parent.insertBefore(blockNode, next.nextElementSibling);
+      }
+    }
+
+    setTimeout(updateActiveTableRect, 50);
+    setContent(parent.innerHTML);
+  };
+
+  const handleResizeMouseDown = (
+    e: React.MouseEvent,
+    direction: "nw" | "ne" | "se" | "sw" | "n" | "s" | "e" | "w",
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!activeMedia) return;
+
+    const startWidth = activeMedia.clientWidth;
+    const startHeight = activeMedia.clientHeight;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const aspectRatio = startWidth / startHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+
+      if (direction === "se") {
+        newWidth = startWidth + deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "sw") {
+        newWidth = startWidth - deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "ne") {
+        newWidth = startWidth + deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "nw") {
+        newWidth = startWidth - deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "e") {
+        newWidth = startWidth + deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "w") {
+        newWidth = startWidth - deltaX;
+        newHeight = newWidth / aspectRatio;
+      } else if (direction === "s") {
+        newHeight = startHeight + deltaY;
+        newWidth = newHeight * aspectRatio;
+      } else if (direction === "n") {
+        newHeight = startHeight - deltaY;
+        newWidth = newHeight * aspectRatio;
+      }
+
+      if (newWidth < 50) {
+        newWidth = 50;
+        newHeight = newWidth / aspectRatio;
+      }
+      const maxW = editorRef.current?.clientWidth || 800;
+      if (newWidth > maxW) {
+        newWidth = maxW;
+        newHeight = newWidth / aspectRatio;
+      }
+
+      activeMedia.style.width = `${newWidth}px`;
+      activeMedia.style.height = `${newHeight}px`;
+
+      updateActiveMediaRect();
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      if (editorRef.current) {
+        setContent(editorRef.current.innerHTML);
+      }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
   useEffect(() => {
     // Fetch tags from DB
     db.getTags().then((tags) => {
-      const merged = Array.from(new Set([...PREDEFINED_TAGS, ...tags]));
+      const merged = Array.from(new Set([...tags]));
       setAvailableTags(merged);
     });
   }, []);
@@ -380,6 +714,7 @@ export function BlogEditor() {
       readingTime: "5 min",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      lastEdit: user?.user_metadata.name || "Admin",
     };
 
     try {
@@ -434,6 +769,7 @@ export function BlogEditor() {
       readingTime: "5 min",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      lastEdit: user?.user_metadata.name || "Admin",
     };
 
     if (isEditing && id) {
@@ -569,10 +905,129 @@ export function BlogEditor() {
     input.click();
   };
 
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      setSavedRange(sel.getRangeAt(0));
+    }
+  };
+
+  const restoreSelection = (range: Range | null) => {
+    if (range) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  };
+
   const handleLinkClick = () => {
-    const url = prompt("Enter URL:");
-    if (url) {
-      executeCommand("createLink", url);
+    saveSelection();
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString() : "";
+    setLinkText(selectedText);
+    setLinkUrl("");
+    setIsLinkModalOpen(true);
+  };
+
+  const handleInsertLink = () => {
+    restoreSelection(savedRange);
+    if (!linkUrl.trim()) {
+      setIsLinkModalOpen(false);
+      return;
+    }
+
+    const cleanUrl = linkUrl.trim();
+    const textToInsert = linkText.trim() || cleanUrl;
+
+    if (linkText.trim()) {
+      executeCommand("createLink", cleanUrl);
+    } else {
+      insertHTML(
+        `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80 transition-colors">${textToInsert}</a>`,
+      );
+    }
+
+    setIsLinkModalOpen(false);
+  };
+
+  const handleVideoClick = () => {
+    saveSelection();
+    setVideoUrl("");
+    setVideoType("youtube");
+    setIsVideoModalOpen(true);
+  };
+
+  const handleInsertVideo = () => {
+    restoreSelection(savedRange);
+    if (!videoUrl.trim()) {
+      setIsVideoModalOpen(false);
+      return;
+    }
+
+    let embedHtml = "";
+    if (videoType === "youtube") {
+      const url = videoUrl.trim();
+      const ytRegex =
+        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+      const match = url.match(ytRegex);
+      const videoId = match ? match[1] : null;
+
+      if (videoId) {
+        embedHtml = `<iframe src="https://www.youtube.com/embed/${videoId}" class="w-full aspect-video rounded-lg my-4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+      } else {
+        toast.error("Invalid YouTube URL.");
+        return;
+      }
+    } else {
+      embedHtml = `<video src="${videoUrl.trim()}" controls class="w-full rounded-lg my-4"></video>`;
+    }
+
+    insertHTML(embedHtml);
+    setIsVideoModalOpen(false);
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsVideoUploading(true);
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+    const isSupabaseConfigured =
+      supabaseUrl &&
+      !supabaseUrl.includes("YOUR_SUPABASE_PROJECT_URL") &&
+      (import.meta.env.VITE_SUPABASE_ANON_KEY || "");
+
+    if (isSupabaseConfigured) {
+      try {
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `inline-videos/${fileName}`;
+
+        const { error } = await supabase.storage
+          .from("blog-images")
+          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        if (error) throw error;
+
+        const cleanUrl = supabaseUrl.replace(/\/$/, "");
+        const publicUrl = `${cleanUrl}/storage/v1/object/public/blog-images/${filePath}`;
+        setVideoUrl(publicUrl);
+        toast.success("Video uploaded successfully!");
+      } catch (err) {
+        console.error("Supabase video upload failed:", err);
+        toast.error("Failed to upload video to storage.");
+      } finally {
+        setIsVideoUploading(false);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const url = event.target?.result as string;
+        setVideoUrl(url);
+        toast.success("Video prepared successfully!");
+        setIsVideoUploading(false);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -869,6 +1324,16 @@ export function BlogEditor() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground"
                   onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleVideoClick}
+                  title="Insert Video"
+                >
+                  <Video className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertHTML(
                       '<table class="min-w-full divide-y divide-border border rounded-md my-4"><thead><tr class="bg-muted/50"><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 1</th><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 2</th></tr></thead><tbody class="divide-y divide-border"><tr><td class="px-4 py-2 text-sm border">Data 1</td><td class="px-4 py-2 text-sm border">Data 2</td></tr></tbody></table>',
@@ -887,7 +1352,7 @@ export function BlogEditor() {
                   <Minus className="h-4 w-4" />
                 </Button>
                 <Button
-                  variant={!isHtmlMode ? "secondary" : "ghost"}
+                  variant={isHtmlMode ? "secondary" : "ghost"}
                   className="text-muted-foreground px-2"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
@@ -923,15 +1388,258 @@ export function BlogEditor() {
               </div>
               {/* Rich Text Area */}
               {!isHtmlMode ? (
-                <div
-                  ref={editorRef}
-                  className="prose prose-lg dark:prose-invert bg-white p-3 rounded-lg max-w-none min-h-[400px] outline-none relative"
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={(e) => setContent(e.currentTarget.innerHTML)}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                />
+                <div className="relative">
+                  <div
+                    ref={editorRef}
+                    className="prose prose-lg dark:prose-invert bg-white p-3 rounded-lg max-w-none min-h-[400px] outline-none relative"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                  />
+                  {activeMedia && mediaRect && (
+                    <div
+                      className="absolute pointer-events-none border-2 border-primary image-control-overlay rounded-md"
+                      style={{
+                        top: mediaRect.top,
+                        left: mediaRect.left,
+                        width: mediaRect.width,
+                        height: mediaRect.height,
+                        zIndex: 40,
+                      }}
+                    >
+                      {/* Toolbar */}
+                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Move Up"
+                          onClick={() => moveMedia("up")}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Move Down"
+                          onClick={() => moveMedia("down")}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                        <div className="w-px h-4 bg-border/50 mx-1"></div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Align Left"
+                          onClick={() => {
+                            activeMedia.style.display = "inline";
+                            activeMedia.style.float = "left";
+                            activeMedia.style.margin = "0 1rem 1rem 0";
+                            activeMedia.style.width = "40%";
+                            setTimeout(updateActiveMediaRect, 0);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <AlignLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Align Center"
+                          onClick={() => {
+                            activeMedia.style.display = "block";
+                            activeMedia.style.float = "none";
+                            activeMedia.style.margin = "1rem auto";
+                            activeMedia.style.width = "75%";
+                            setTimeout(updateActiveMediaRect, 0);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <AlignCenter className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Align Right"
+                          onClick={() => {
+                            activeMedia.style.display = "inline";
+                            activeMedia.style.float = "right";
+                            activeMedia.style.margin = "0 0 1rem 1rem";
+                            activeMedia.style.width = "40%";
+                            setTimeout(updateActiveMediaRect, 0);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <AlignRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Full Width"
+                          onClick={() => {
+                            activeMedia.style.display = "block";
+                            activeMedia.style.float = "none";
+                            activeMedia.style.margin = "1rem 0";
+                            activeMedia.style.width = "100%";
+                            setTimeout(updateActiveMediaRect, 0);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <AlignJustify className="h-4 w-4" />
+                        </Button>
+                        <div className="w-px h-4 bg-border/50 mx-1"></div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          title="Delete Block"
+                          onClick={() => {
+                            activeMedia.remove();
+                            setActiveMedia(null);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* Drag Resize Handles */}
+                      {/* Corners */}
+                      <div
+                        className="absolute top-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-nw-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+                      />
+                      <div
+                        className="absolute top-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-ne-resize -mt-1.5 -mr-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+                      />
+                      <div
+                        className="absolute bottom-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-se-resize -mb-1.5 -mr-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-sw-resize -mb-1.5 -ml-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+                      />
+                      {/* Sides */}
+                      <div
+                        className="absolute top-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-n-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "n")}
+                      />
+                      <div
+                        className="absolute bottom-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-s-resize -mb-1.5 -ml-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "s")}
+                      />
+                      <div
+                        className="absolute top-1/2 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-e-resize -mt-1.5 -mr-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "e")}
+                      />
+                      <div
+                        className="absolute top-1/2 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-w-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                        onMouseDown={(e) => handleResizeMouseDown(e, "w")}
+                      />
+                    </div>
+                  )}
+                  {activeTable && tableRect && (
+                    <div
+                      className="absolute pointer-events-none border-2 border-dashed border-primary/50 table-control-overlay rounded-md"
+                      style={{
+                        top: tableRect.top,
+                        left: tableRect.left,
+                        width: tableRect.width,
+                        height: tableRect.height,
+                        zIndex: 40,
+                      }}
+                    >
+                      {/* Floating Toolbar above the Table */}
+                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Move Up"
+                          onClick={() => moveTable("up")}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          title="Move Down"
+                          onClick={() => moveTable("down")}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                        <div className="w-px h-4 bg-border/50 mx-1"></div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                          title="Add Row"
+                          onClick={() => addRow("below")}
+                        >
+                          Row +
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                          title="Add Column"
+                          onClick={addColumn}
+                        >
+                          Col +
+                        </Button>
+                        <div className="w-px h-4 bg-border/50 mx-1"></div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                          title="Delete Row"
+                          onClick={deleteRow}
+                        >
+                          Row -
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                          title="Delete Column"
+                          onClick={deleteColumn}
+                        >
+                          Col -
+                        </Button>
+                        <div className="w-px h-4 bg-border/50 mx-1"></div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          title="Delete Table"
+                          onClick={() => {
+                            activeTable.remove();
+                            setActiveTable(null);
+                            if (editorRef.current)
+                              setContent(editorRef.current.innerHTML);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="prose prose-lg dark:prose-invert bg-white p-3 rounded-lg max-w-none  outline-none relative">
                   <textarea
@@ -967,9 +1675,7 @@ export function BlogEditor() {
                 value={category}
                 onChange={setCategory}
                 options={
-                  categories.length > 0
-                    ? categories.map((c) => c.name)
-                    : ["Engineering", "Product", "Design"]
+                  categories.length > 0 ? categories.map((c) => c.name) : []
                 }
                 placeholder="Select categories..."
                 onAddOption={handleAddCustomCategory}
@@ -1077,6 +1783,184 @@ export function BlogEditor() {
           </div>
         </div>
       )}
+
+      {/* Link Insertion Modal */}
+      <Modal
+        isOpen={isLinkModalOpen}
+        onClose={() => setIsLinkModalOpen(false)}
+        title="Insert Link"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsLinkModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleInsertLink} disabled={!linkUrl.trim()}>
+              Insert
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Link Text</label>
+            <Input
+              placeholder="e.g. Visit our website"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">URL</label>
+            <Input
+              type="url"
+              placeholder="e.g. https://example.com"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && linkUrl.trim()) {
+                  handleInsertLink();
+                }
+              }}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Video Insertion Modal */}
+      <Modal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        title="Insert Video"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsVideoModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleInsertVideo}
+              disabled={!videoUrl.trim() || isVideoUploading}
+            >
+              Insert Video
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          {/* Tabs */}
+          <div className="flex gap-2 p-1 bg-muted rounded-lg">
+            <Button
+              type="button"
+              variant={videoType === "youtube" ? "secondary" : "ghost"}
+              className="flex-1 text-xs"
+              onClick={() => {
+                setVideoType("youtube");
+                setVideoUrl("");
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="mr-2 h-3.5 w-3.5 text-red-500 inline-block"
+              >
+                <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+              YouTube Link
+            </Button>
+            <Button
+              type="button"
+              variant={videoType === "file" ? "secondary" : "ghost"}
+              className="flex-1 text-xs"
+              onClick={() => {
+                setVideoType("file");
+                setVideoUrl("");
+              }}
+            >
+              <Video className="mr-2 h-3.5 w-3.5 text-blue-500" />
+              Upload / Direct Link
+            </Button>
+          </div>
+
+          {videoType === "youtube" ? (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">YouTube URL</label>
+              <Input
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && videoUrl.trim()) {
+                    handleInsertVideo();
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Video URL</label>
+                <Input
+                  type="url"
+                  placeholder="https://example.com/video.mp4"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                />
+              </div>
+
+              <div className="relative">
+                <div className="text-xs text-muted-foreground mb-2 text-center">
+                  or upload local file
+                </div>
+                <div className="flex items-center justify-center w-full">
+                  <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer bg-background hover:bg-muted/30 transition-colors">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      {isVideoUploading ? (
+                        <>
+                          <Loader2 className="h-6 w-6 animate-spin text-primary mb-1" />
+                          <p className="text-xs text-muted-foreground">
+                            Uploading video...
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <Video className="h-6 w-6 text-muted-foreground mb-1" />
+                          <p className="text-xs text-muted-foreground font-medium text-center">
+                            Click to select MP4/WebM file
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      disabled={isVideoUploading}
+                      onChange={handleVideoUpload}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .prose iframe, .prose video {
+          pointer-events: none;
+        }
+        .prose-lg p,
+        .prose-lg :where(p):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+          margin-top: 0px !important;
+          margin-bottom: 0px !important;
+        }
+      `,
+        }}
+      />
     </div>
   );
 }

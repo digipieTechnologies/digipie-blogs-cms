@@ -18,6 +18,7 @@ export interface Blog {
   publishedAt?: string;
   readingTime: string;
   tags: string[];
+  lastEdit?: string;
 }
 
 export interface Category {

@@ -41,8 +41,7 @@ export function convertContentToHtml(content: any): string {
     if (
       content.length > 0 &&
       content[0] &&
-      content[0].type !== undefined &&
-      content[0].text !== undefined
+      content[0].type !== undefined
     ) {
       return content
         .map((block: any) => {
@@ -53,6 +52,12 @@ export function convertContentToHtml(content: any): string {
               return `<h2${idAttr}>${text}</h2>`;
             case "subheading":
               return `<h3${idAttr}>${text}</h3>`;
+            case "image":
+              return `<img src="${block.src || ""}" alt="${block.alt || ""}" style="${block.style || ""}" class="max-w-full h-auto rounded-lg my-4" />`;
+            case "video":
+              return `<video src="${block.src || ""}" controls class="w-full rounded-lg my-4"></video>`;
+            case "embed":
+              return `<iframe src="${block.src || ""}" class="w-full aspect-video rounded-lg my-4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
             case "paragraph":
             default:
               return `<p>${text}</p>`;
@@ -164,6 +169,29 @@ export function convertHtmlToBlocks(html: string): any[] {
   const parseNode = (node: Element) => {
     const tagName = node.tagName.toLowerCase();
 
+    // If it's an image
+    if (tagName === "img") {
+      const src = node.getAttribute("src") || "";
+      const alt = node.getAttribute("alt") || "";
+      const style = node.getAttribute("style") || "";
+      blocks.push({ type: "image", src, alt, style });
+      return;
+    }
+
+    // If it's a video
+    if (tagName === "video") {
+      const src = node.getAttribute("src") || "";
+      blocks.push({ type: "video", src });
+      return;
+    }
+
+    // If it's an iframe (YouTube embed)
+    if (tagName === "iframe") {
+      const src = node.getAttribute("src") || "";
+      blocks.push({ type: "embed", src });
+      return;
+    }
+
     // If it's a heading
     if (tagName === "h1" || tagName === "h2") {
       const text = node.innerHTML.trim();
@@ -196,6 +224,11 @@ export function convertHtmlToBlocks(html: string): any[] {
 
     // If it's a paragraph
     if (tagName === "p") {
+      const images = node.querySelectorAll("img, iframe, video");
+      if (images.length > 0) {
+        Array.from(node.children).forEach((child) => parseNode(child));
+        return;
+      }
       const text = node.innerHTML.trim();
       if (text) {
         blocks.push({ text, type: "paragraph" });
@@ -213,7 +246,7 @@ export function convertHtmlToBlocks(html: string): any[] {
     }
 
     // If it's a container (like div, section)
-    if (hasBlockChildren(node)) {
+    if (hasBlockChildren(node) || node.querySelector("img, iframe, video")) {
       Array.from(node.children).forEach((child) => parseNode(child));
     } else {
       const text = node.innerHTML.trim();

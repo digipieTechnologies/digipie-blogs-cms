@@ -30,6 +30,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { db } from "@/lib/db";
 import toast from "react-hot-toast";
 import { Modal } from "@/components/ui/modal";
+import { HoverPopup } from "@/components/ui/HoverPopup";
 
 export function BlogsList() {
   const [search, setSearch] = useState("");
@@ -177,46 +178,86 @@ export function BlogsList() {
       ),
     },
     {
+      header: "Last Edit",
+      cellClassName: "min-w-[150px] text-nowrap text-muted-foreground",
+      cell: (blog) => blog.lastEdit || "-",
+    },
+    {
       header: "Category",
-      cellClassName: "max-w-[150px]",
-      cell: (blog) => (
-        <div className="flex flex-wrap gap-1">
-          {Array.isArray(blog.category) ? (
-            blog.category.map((cat) => (
+      cellClassName: "max-w-[350px]",
+      cell: (blog) => {
+        const categories = Array.isArray(blog.category)
+          ? blog.category
+          : blog.category
+            ? [blog.category]
+            : [];
+        const hasMore = categories.length > 1;
+        const visibleCategories = hasMore ? categories.slice(0, 1) : categories;
+        const extraCategories = categories.slice(1);
+
+        return (
+          <div className="flex items-center gap-1">
+            {visibleCategories.map((cat) => (
               <span
                 key={cat}
-                className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50"
+                className="inline-flex items-center text-nowrap rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50"
               >
                 {cat}
               </span>
-            ))
-          ) : (
-            <span className="inline-flex items-center rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground ring-1 ring-inset ring-border/50">
-              {blog.category}
-            </span>
-          )}
-        </div>
-      ),
+            ))}
+            {hasMore && (
+              <HoverPopup
+                trigger={
+                  <span className="inline-flex items-center text-nowrap rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border/50">
+                    +{extraCategories.length}
+                  </span>
+                }
+                items={extraCategories}
+              />
+            )}
+            {categories.length === 0 && (
+              <span className="text-xs text-muted-foreground">-</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: "Tags",
-      cellClassName: "max-w-[150px]",
-      cell: (blog) => (
-        <div className="flex flex-wrap gap-1">
-          {blog.tags && blog.tags.length > 0 ? (
-            blog.tags.slice(0, 3).map((tag) => (
+      cellClassName: "max-w-[350px]",
+      cell: (blog) => {
+        const tags = blog.tags || [];
+        const hasMore = tags.length > 1;
+        const visibleTags = hasMore ? tags.slice(0, 1) : tags;
+        const extraTags = tags.slice(1);
+
+        return (
+          <div className="flex items-center gap-1">
+            {visibleTags.map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                className="inline-flex text-nowrap items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
               >
                 {tag}
               </span>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">-</span>
-          )}
-        </div>
-      ),
+            ))}
+            {hasMore && (
+              <HoverPopup
+                trigger={
+                  <span className="inline-flex text-nowrap items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    +{extraTags.length}
+                  </span>
+                }
+                items={extraTags}
+                itemClassName="text-[10px]"
+              />
+            )}
+            {tags.length === 0 && (
+              <span className="text-xs text-muted-foreground">-</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: "Status",
@@ -260,6 +301,7 @@ export function BlogsList() {
           <span className="text-xs text-muted-foreground italic">Draft</span>
         ),
     },
+
     {
       header: "Actions",
       headerClassName: "text-right",
