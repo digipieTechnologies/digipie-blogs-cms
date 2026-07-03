@@ -108,20 +108,6 @@ interface HeadingItem {
   level: number;
 }
 
-const extractHeadings = (html: string): HeadingItem[] => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const headingElements = doc.querySelectorAll("h2, h3");
-  return Array.from(headingElements).map((el, index) => {
-    const id = el.id || `heading-${index}`;
-    return {
-      id,
-      text: el.textContent || "",
-      level: el.tagName.toLowerCase() === "h2" ? 2 : 3,
-    };
-  });
-};
-
 export function BlogEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -196,6 +182,7 @@ export function BlogEditor() {
 
   const { data: categories = [], isLoading: categoriesLoading } =
     useCategories();
+
   const { data: fetchedBlog, isLoading: blogLoading } = useBlog(
     isEditing ? id : undefined,
   );
@@ -232,6 +219,67 @@ export function BlogEditor() {
     }
   };
 
+  const handleUploadImage = async (imageSrc: string): Promise<string> => {
+    if (!imageSrc || !imageSrc.startsWith("data:image/")) {
+      return imageSrc;
+    }
+
+    const isSupabaseConfigured = () => {
+      const url = import.meta.env.VITE_SUPABASE_URL || "";
+      const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+      return (
+        url &&
+        !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
+        key &&
+        !key.includes("YOUR_SUPABASE_ANON_KEY")
+      );
+    };
+
+    if (!isSupabaseConfigured()) {
+      return imageSrc;
+    }
+
+    try {
+      const mimeType =
+        imageSrc.split(",")[0].match(/:(.*?);/)?.[1] || "image/png";
+      const fileExt = mimeType.split("/")[1] || "png";
+
+      let baseName =
+        slug.trim() ||
+        title
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-");
+      if (!baseName) {
+        const now = new Date();
+        const dateStr = now.toISOString().split("T")[0] + "-" + now.getTime();
+        baseName = `blog-cover-${dateStr}`;
+      }
+      const cleanBaseName = baseName.replace(/(^-|-$)/g, "");
+      const fileName = `${cleanBaseName}.${fileExt}`;
+      const filePath = `covers/${fileName}`;
+
+      const response = await fetch(imageSrc);
+      const blob = await response.blob();
+      const file = new File([blob], filePath.split("/").pop() || "image", {
+        type: mimeType,
+      });
+
+      const { error } = await supabase.storage
+        .from("blog-images")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (error) throw error;
+      return filePath;
+    } catch (err) {
+      console.error("Failed to upload base64 image to Supabase on save:", err);
+      return imageSrc;
+    }
+  };
+
   const loading = isEditing
     ? categoriesLoading || blogLoading
     : categoriesLoading;
@@ -245,74 +293,9 @@ export function BlogEditor() {
     input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
       if (file) {
-        const updateTitleFromFileName = (fileName: string) => {
-          const originalName = fileName.split(".").slice(0, -1).join(".");
-          const cleanTitleName = originalName
-            .replace(/[-_]+/g, " ")
-            .trim()
-            .split(/\s+/)
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" ");
-        };
-
-        const isSupabaseConfigured = () => {
-          const url = import.meta.env.VITE_SUPABASE_URL || "";
-          const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-          return (
-            url &&
-            !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
-            key &&
-            !key.includes("YOUR_SUPABASE_ANON_KEY")
-          );
-        };
-
-        if (isSupabaseConfigured()) {
-          try {
-            const fileExt = file.name.split(".").pop();
-            const originalFileName = file.name
-              .split(".")
-              .slice(0, -1)
-              .join(".");
-            const baseName =
-              slug.trim() ||
-              title
-                .trim()
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "-") ||
-              originalFileName.toLowerCase().replace(/[^a-z0-9]+/g, "-") ||
-              "blog-cover";
-            const cleanBaseName = baseName.replace(/(^-|-$)/g, "");
-            const fileName = `${cleanBaseName}.${fileExt}`;
-            const filePath = `covers/${fileName}`;
-
-            const { data, error } = await supabase.storage
-              .from("blog-images")
-              .upload(filePath, file, {
-                cacheControl: "3600",
-                upsert: false,
-              });
-
-            if (error) throw error;
-
-            const { data: urlData } = supabase.storage
-              .from("blog-images")
-              .getPublicUrl(filePath);
-            const cleanUrl = urlData.publicUrl.split("?")[0];
-            setCoverImage(`${cleanUrl}?t=${Date.now()}`);
-            updateTitleFromFileName(file.name);
-            return;
-          } catch (err) {
-            console.warn(
-              "Supabase upload failed, falling back to base64 reader:",
-              err,
-            );
-          }
-        }
-
         const reader = new FileReader();
         reader.onload = (event) => {
           setCoverImage(event.target?.result as string);
-          updateTitleFromFileName(file.name);
         };
         reader.readAsDataURL(file);
       }
@@ -362,72 +345,9 @@ export function BlogEditor() {
     }
   };
 
-  const uploadBase64ImageIfNeeded = async (
-    imageSrc: string,
-  ): Promise<string> => {
-    if (!imageSrc || !imageSrc.startsWith("data:image/")) {
-      return imageSrc;
-    }
-
-    const isSupabaseConfigured = () => {
-      const url = import.meta.env.VITE_SUPABASE_URL || "";
-      const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-      return (
-        url &&
-        !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
-        key &&
-        !key.includes("YOUR_SUPABASE_ANON_KEY")
-      );
-    };
-
-    if (!isSupabaseConfigured()) {
-      return imageSrc;
-    }
-
-    try {
-      const mimeType =
-        imageSrc.split(",")[0].match(/:(.*?);/)?.[1] || "image/png";
-      const fileExt = mimeType.split("/")[1] || "png";
-
-      const baseName =
-        slug.trim() ||
-        title
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-") ||
-        "blog-cover";
-      const cleanBaseName = baseName.replace(/(^-|-$)/g, "");
-      const fileName = `${cleanBaseName}.${fileExt}`;
-      const filePath = `covers/${fileName}`;
-
-      const response = await fetch(imageSrc);
-      const blob = await response.blob();
-      const file = new File([blob], filePath.split("/").pop() || "image", {
-        type: mimeType,
-      });
-
-      const { error } = await supabase.storage
-        .from("blog-images")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (error) throw error;
-      const { data } = supabase.storage
-        .from("blog-images")
-        .getPublicUrl(filePath);
-      const cleanUrl = data.publicUrl.split("?")[0];
-      return `${cleanUrl}?t=${Date.now()}`;
-    } catch (err) {
-      console.error("Failed to upload base64 image to Supabase on save:", err);
-      return imageSrc;
-    }
-  };
-
   const saveAndExit = async () => {
     setIsSavingDraft(true);
-    const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
+    const finalCoverImage = await handleUploadImage(coverImage);
     setCoverImage(finalCoverImage);
 
     const categoriesArray = category
@@ -483,7 +403,7 @@ export function BlogEditor() {
   };
 
   const handleSave = async () => {
-    const finalCoverImage = await uploadBase64ImageIfNeeded(coverImage);
+    const finalCoverImage = await handleUploadImage(coverImage);
     setCoverImage(finalCoverImage);
 
     const categoriesArray = category

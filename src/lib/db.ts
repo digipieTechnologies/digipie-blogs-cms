@@ -396,7 +396,7 @@ export const db = {
       if (blogData?.cover_image) {
         const cleanCoverImage = blogData.cover_image.split("?")[0];
         const parts = cleanCoverImage.split("blog-images/");
-        const filePath = parts.length > 1 ? parts[1] : cleanCoverImage;
+        const filePath = decodeURIComponent(parts.length > 1 ? parts[1] : cleanCoverImage);
         
         await supabase.storage.from("blog-images").remove([filePath]);
       }
