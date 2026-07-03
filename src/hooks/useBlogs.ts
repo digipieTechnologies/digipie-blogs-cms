@@ -27,7 +27,7 @@ export function useCreateBlog() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: (blog: Partial<Blog>) => db.createBlog(blog),
+    mutationFn: (blog: Omit<Blog, "id">) => db.createBlog(blog),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: blogKeys.all });
     },

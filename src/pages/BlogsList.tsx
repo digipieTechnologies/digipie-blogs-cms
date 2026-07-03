@@ -171,7 +171,7 @@ export function BlogsList() {
             className="w-6 h-6 rounded-full object-cover border border-border/50"
           />
           <span className="text-sm font-medium text-foreground">
-            {blog.author?.name || "Admin"}
+            {blog.author?.name || "unkwon"}
           </span>
         </div>
       ),

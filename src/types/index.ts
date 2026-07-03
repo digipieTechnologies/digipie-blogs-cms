@@ -7,11 +7,12 @@ export interface Blog {
   category: string | string[];
   status: 'draft' | 'published' | 'archived';
   coverImage: string;
-  author: {
+  author?: {
     name: string;
     avatar: string;
   };
   authorId?: string;
+  author_name?: string;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;

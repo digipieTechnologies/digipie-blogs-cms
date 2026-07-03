@@ -123,7 +123,7 @@ export const db = {
           category: categories.length > 0 ? categories : ["Engineering"],
           status: b.status || "draft",
           coverImage: b.cover_image || b.coverImage || "",
-          author: b.author ? { name: b.author.name, avatar: b.author.avatar_url } : { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
+          author: b.author ? { name: b.author.name || b.author_name, avatar: b.author.avatar_url } : { name: b.author_name || "unknown", avatar: "" },
           authorId: b.author_id,
           createdAt: b.created_at || b.createdAt,
           updatedAt: b.updated_at || b.updatedAt,

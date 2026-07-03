@@ -253,11 +253,6 @@ export function BlogEditor() {
             .split(/\s+/)
             .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(" ");
-
-          if (!title.trim()) {
-            setTitle(cleanTitleName);
-            setSlug(originalName.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
-          }
         };
 
         const isSupabaseConfigured = () => {
@@ -461,8 +456,8 @@ export function BlogEditor() {
       status: "draft" as const,
       tags: tagsArray,
       authorId: user?.id,
+      author_name: user?.user_metadata.name || "Admin",
       readingTime: "5 min",
-      author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -515,8 +510,8 @@ export function BlogEditor() {
       status: "published" as const,
       tags: tagsArray,
       authorId: user?.id,
+      author_name: user?.user_metadata.name || "Admin",
       readingTime: "5 min",
-      author: { name: "Admin", avatar: "https://i.pravatar.cc/150?u=admin" },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
