@@ -149,7 +149,7 @@ export function BlogDetailPreview({
       try {
         const normalizeCategories = (category: string | string[]) =>
           (Array.isArray(category) ? category : [category]).map((c) =>
-            c.toLowerCase()
+            c.toLowerCase(),
           );
         const currentCategories = normalizeCategories(blog.category);
 
@@ -158,9 +158,8 @@ export function BlogDetailPreview({
           .filter(
             (b) =>
               normalizeCategories(b.category).some((c) =>
-                currentCategories.includes(c)
-              ) &&
-              b.title !== blog.title
+                currentCategories.includes(c),
+              ) && b.title !== blog.title,
           )
           .slice(0, 3);
         setRelated(filtered);
@@ -220,7 +219,7 @@ export function BlogDetailPreview({
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-dark via-navy-dark/60 to-transparent" />
-        <div className="relative z-10 max-w-425 mx-auto px-6 md:px-8 lg:px-24 pt-14 pb-12 sm:pt-20 sm:pb-16">
+        <div className="relative z-10  mx-auto px-6 md:px-8 lg:px-24 pt-14 pb-12 sm:pt-20 sm:pb-16">
           {/* Meta row */}
           <div className="flex flex-wrap items-center gap-2 mb-5">
             <span className="text-[13px] font-semibold text-orange">
@@ -242,7 +241,7 @@ export function BlogDetailPreview({
       </div>
 
       {/* Body with optional TOC sidebar */}
-      <div className="max-w-425 flex gap-12 items-start justify-between px-6 md:px-8 lg:px-24 mx-auto py-12 sm:py-16">
+      <div className=" flex gap-12 items-start justify-between px-6 md:px-8 lg:px-24 mx-auto py-12 sm:py-16">
         {/* Article */}
         <article className="min-w-0 flex-1">
           {/* Mobile TOC */}

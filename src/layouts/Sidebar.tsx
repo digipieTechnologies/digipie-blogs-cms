@@ -5,6 +5,7 @@ import {
   FolderTree,
   Tag,
   Settings,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ const navigation = [
   { name: "Blogs", href: "/blogs", icon: FileText },
   { name: "Categories", href: "/categories", icon: FolderTree },
   { name: "Tags", href: "/tags", icon: Tag },
+  { name: "Inquiries", href: "/inquiries", icon: Mail },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

@@ -8,7 +8,8 @@ import { useCategories } from "@/hooks/useCategories";
 
 export function Dashboard() {
   const { data: blogs = [], isLoading: blogsLoading } = useBlogs();
-  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const { data: categories = [], isLoading: categoriesLoading } =
+    useCategories();
 
   const loading = blogsLoading || categoriesLoading;
   const categoryCount = categories.length;
@@ -108,7 +109,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+      <div>
         <Card className="lg:col-span-4 subtle-shadow border-border/50 bg-background/50 backdrop-blur-sm overflow-hidden">
           <CardHeader>
             <CardTitle>Recent Blogs</CardTitle>
@@ -118,7 +119,10 @@ export function Dashboard() {
               {loading ? (
                 <div className="space-y-4">
                   {[1, 2, 3].map((n) => (
-                    <div key={n} className="flex items-center gap-4 animate-pulse">
+                    <div
+                      key={n}
+                      className="flex items-center gap-4 animate-pulse"
+                    >
                       <div className="w-16 h-12 rounded bg-muted" />
                       <div className="flex-1 space-y-2">
                         <div className="h-3 bg-muted rounded w-2/3" />
@@ -133,9 +137,9 @@ export function Dashboard() {
                 </p>
               ) : (
                 blogs.slice(0, 5).map((blog) => (
-                  <Link 
+                  <Link
                     to={`/blogs/preview/${blog.id}`}
-                    key={blog.id} 
+                    key={blog.id}
                     className="flex items-center group p-2 -mx-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     <div className="w-16 h-12 rounded overflow-hidden mr-4 border border-border/50 shrink-0 relative">

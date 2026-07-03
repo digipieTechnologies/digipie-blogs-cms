@@ -137,7 +137,7 @@ export function BlogsList() {
   const columns: ColumnDef<Blog>[] = [
     {
       header: "Post",
-      cellClassName: "w-[25%] min-w-[200px] max-w-[300px]",
+      cellClassName: " min-w-[450px] ",
       cell: (blog) => (
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded bg-muted overflow-hidden shrink-0">
@@ -148,7 +148,7 @@ export function BlogsList() {
             />
           </div>
           <Link to={`/blogs/preview/${blog.id}`} className="min-w-0 block">
-            <p className="font-medium truncate hover:text-primary transition-colors cursor-pointer">
+            <p className="font-medium line-clamp-2 hover:text-primary transition-colors cursor-pointer">
               {blog.title}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -184,7 +184,7 @@ export function BlogsList() {
     },
     {
       header: "Category",
-      cellClassName: "max-w-[350px]",
+      cellClassName: "max-w-[250px]",
       cell: (blog) => {
         const categories = Array.isArray(blog.category)
           ? blog.category
@@ -224,7 +224,7 @@ export function BlogsList() {
     },
     {
       header: "Tags",
-      cellClassName: "min-w-[350px]",
+      cellClassName: "min-w-[250px]",
       cell: (blog) => {
         const tags = blog.tags || [];
         const hasMore = tags.length > 1;

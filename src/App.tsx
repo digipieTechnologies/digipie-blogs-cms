@@ -7,6 +7,7 @@ import { BlogPreview } from "@/pages/BlogPreview";
 import { Categories } from "@/pages/Categories";
 import { Tags } from "@/pages/Tags";
 import { Settings } from "@/pages/Settings";
+import { Inquiries } from "@/pages/Inquiries";
 import { Login } from "@/pages/Login";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="categories" element={<Categories />} />
               <Route path="tags" element={<Tags />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="inquiries" element={<Inquiries />} />
             </Route>
             <Route path="/blogs/new" element={<BlogEditor />} />
             <Route path="/blogs/:id" element={<BlogEditor />} />
