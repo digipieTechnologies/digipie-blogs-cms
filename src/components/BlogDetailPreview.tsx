@@ -147,11 +147,19 @@ export function BlogDetailPreview({
     async function loadRelated() {
       if (!blog.category) return;
       try {
+        const normalizeCategories = (category: string | string[]) =>
+          (Array.isArray(category) ? category : [category]).map((c) =>
+            c.toLowerCase()
+          );
+        const currentCategories = normalizeCategories(blog.category);
+
         const allBlogs = await db.getBlogs();
         const filtered = allBlogs
           .filter(
             (b) =>
-              b.category.toLowerCase() === blog.category.toLowerCase() &&
+              normalizeCategories(b.category).some((c) =>
+                currentCategories.includes(c)
+              ) &&
               b.title !== blog.title
           )
           .slice(0, 3);
