@@ -224,7 +224,7 @@ export function BlogsList() {
     },
     {
       header: "Tags",
-      cellClassName: "max-w-[350px]",
+      cellClassName: "min-w-[350px]",
       cell: (blog) => {
         const tags = blog.tags || [];
         const hasMore = tags.length > 1;

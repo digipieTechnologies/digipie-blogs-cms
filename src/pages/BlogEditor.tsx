@@ -109,6 +109,7 @@ export function BlogEditor() {
 
   const [title, setTitle] = useState("");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [content, setContent] = useState("Start writing..");
   const [coverImage, setCoverImage] = useState("");
   const [isHtmlMode, setIsHtmlMode] = useState(false);
@@ -738,63 +739,75 @@ export function BlogEditor() {
   };
 
   const handleSave = async () => {
-    const finalCoverImage = await handleUploadImage(coverImage);
-    setCoverImage(finalCoverImage);
+    setIsSaving(true);
+    try {
+      const finalCoverImage = await handleUploadImage(coverImage);
+      setCoverImage(finalCoverImage);
 
-    const categoriesArray = category
-      ? category
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean)
-      : [];
+      const categoriesArray = category
+        ? category
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : [];
 
-    const tagsArray = tagsString
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
+      const tagsArray = tagsString
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
 
-    const blogData = {
-      title: title || "Untitled Post",
-      slug:
-        slug ||
-        (title || "untitled-post").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-      excerpt,
-      content: convertHtmlToBlocks(content),
-      coverImage: finalCoverImage,
-      category: categoriesArray,
-      status: "published" as const,
-      tags: tagsArray,
-      authorId: user?.id,
-      author_name: user?.user_metadata.name || "Admin",
-      readingTime: "5 min",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastEdit: user?.user_metadata.name || "Admin",
-    };
+      const blogData = {
+        title: title || "Untitled Post",
+        slug:
+          slug ||
+          (title || "untitled-post").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        excerpt,
+        content: convertHtmlToBlocks(content),
+        coverImage: finalCoverImage,
+        category: categoriesArray,
+        status: status,
+        tags: tagsArray,
+        authorId: user?.id,
+        author_name: user?.user_metadata.name || "Admin",
+        readingTime: "5 min",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastEdit: user?.user_metadata.name || "Admin",
+      };
 
-    if (isEditing && id) {
-      updateBlogMutation.mutate(
-        { id, blog: blogData },
-        {
+      if (isEditing && id) {
+        updateBlogMutation.mutate(
+          { id, blog: blogData },
+          {
+            onSuccess: () => {
+              setIsSaving(false);
+              setIsPublishDialogOpen(false);
+              toast.success("Blog saved successfully!");
+              navigate("/blogs");
+            },
+            onError: () => {
+              setIsSaving(false);
+              toast.error("Failed to update blog.");
+            },
+          },
+        );
+      } else {
+        createBlogMutation.mutate(blogData, {
           onSuccess: () => {
-            toast.success("Blog updated successfully!");
+            setIsSaving(false);
+            setIsPublishDialogOpen(false);
+            toast.success("Blog saved successfully!");
             navigate("/blogs");
           },
           onError: () => {
-            toast.error("Failed to update blog.");
+            setIsSaving(false);
+            toast.error("Failed to create blog.");
           },
-        },
-      );
-    } else {
-      createBlogMutation.mutate(blogData, {
-        onSuccess: () => {
-          toast.success("Blog created successfully!");
-          navigate("/blogs");
-        },
-        onError: () => {
-          toast.error("Failed to create blog.");
-        },
-      });
+        });
+      }
+    } catch (err) {
+      setIsSaving(false);
+      toast.error("An error occurred while saving.");
     }
   };
 
@@ -1106,13 +1119,20 @@ export function BlogEditor() {
                 )}
               </Button>
               <Button
-                onClick={handleSave}
+                onClick={() => setIsPublishDialogOpen(true)}
                 size="sm"
-                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
+                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 gap-2"
                 title="Save / Publish"
+                disabled={isSaving}
               >
-                <Save className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Save / Publish</span>
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {isSaving ? "Saving..." : "Save / Publish"}
+                </span>
               </Button>
             </div>
           </div>
@@ -1783,6 +1803,77 @@ export function BlogEditor() {
           </div>
         </div>
       )}
+
+      {/* Save & Publish Confirmation Modal */}
+      <Modal
+        isOpen={isPublishDialogOpen}
+        onClose={() => setIsPublishDialogOpen(false)}
+        title="Confirm Save & Publish Options"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsPublishDialogOpen(false)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+              {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Confirm Save
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2 text-foreground">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Post Title</label>
+            <Input
+              placeholder="Post title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Slug</label>
+            <Input
+              placeholder="post-slug"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Category</label>
+              <Input
+                placeholder="Category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Status</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground"
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+              >
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Excerpt</label>
+            <textarea
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground"
+              placeholder="Short summary..."
+              value={excerpt}
+              onChange={(e) => setExcerpt(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* Link Insertion Modal */}
       <Modal
