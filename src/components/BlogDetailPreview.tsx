@@ -207,6 +207,7 @@ export function BlogDetailPreview({
         .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.25rem; }
         .prose li { color: #475569; line-height: 1.85; margin-bottom: 0.5rem; }
         .prose blockquote { border-left-width: 4px; border-left-color: #FF5A1F; padding-left: 1rem; font-style: italic; color: #0A1128; margin: 1.5rem 0; }
+        .prose a { color: #2563eb !important; text-decoration: underline !important; }
       `}</style>
 
       {/* Hero */}
