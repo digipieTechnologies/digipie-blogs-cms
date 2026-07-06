@@ -141,7 +141,7 @@ export function BlogEditor() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiProvider, setAiProvider] = useState(
-    () => localStorage.getItem("ai_provider") || "pollinations",
+    () => localStorage.getItem("ai_provider") || "deepseek",
   );
   const [aiApiKey, setAiApiKey] = useState(
     () => localStorage.getItem("ai_api_key") || "",
@@ -160,116 +160,138 @@ export function BlogEditor() {
     const toastId = toast.loading("AI is crafting your post...");
 
     const topic = title.trim() || aiPrompt.trim();
-    const systemPrompt = `You are a professional blog content writer. Write a comprehensive, detailed blog post about "${topic}". Instruction details: ${aiPrompt || "Write a detailed tutorial/guide style blog post"}. You MUST return the output ONLY as HTML content. Use tags like <h2>, <h3>, <p>, <ul>, <li>, and <blockquote>. Do NOT wrap the code in \`\`\`html markdown block. Start directly with the content.`;
+    const systemPrompt = `You are a professional blog content writer. Write a comprehensive, detailed blog post about "${topic}". Instruction details: ${aiPrompt || "Write a detailed tutorial/guide style blog post"}. You MUST return the output ONLY as HTML content. Use tags like <h2>, <h3>, <p>, <ul>, <li>, and <blockquote>. Do NOT include any <img> tags or image placeholders. Do NOT wrap the code in \`\`\`html markdown block. Start directly with the content.`;
+
+    const generateGrok = async (activeKey: string) => {
+      const key = activeKey || import.meta.env.VITE_GROK_API_KEY;
+      if (!key) {
+        throw new Error(
+          "Grok/Groq API key is required. Please set VITE_GROK_API_KEY in .env or enter it here.",
+        );
+      }
+
+      const isGroq = key.startsWith("gsk_");
+      const endpoint = isGroq
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://api.x.ai/v1/chat/completions";
+      const model = isGroq ? "llama-3.3-70b-versatile" : "grok-2-1212";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: `Generate a blog post about "${topic}" in HTML format.`,
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.error?.message ||
+            "Failed to generate content with Grok/Groq.",
+        );
+      }
+
+      const data = await res.json();
+      return (data.choices?.[0]?.message?.content || "").trim();
+    };
+
+    const generateDeepseek = async (activeKey: string) => {
+      const key = activeKey || import.meta.env.VITE_DEEPSEEK_API_KEY;
+      if (!key) {
+        throw new Error(
+          "DeepSeek API key is required. Please set VITE_DEEPSEEK_API_KEY in .env or enter it here.",
+        );
+      }
+
+      // OpenRouter or Direct
+      const isUrlOpenRouter = key.startsWith("sk-or-v1-");
+      const endpoint = isUrlOpenRouter
+        ? "https://openrouter.ai/api/v1/chat/completions"
+        : "https://api.deepseek.com/chat/completions";
+      const model = isUrlOpenRouter
+        ? "deepseek/deepseek-chat"
+        : "deepseek-chat";
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      };
+      if (isUrlOpenRouter) {
+        headers["HTTP-Referer"] = window.location.origin;
+        headers["X-Title"] = "DigiPie CMS";
+      }
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: `Generate a blog post about "${topic}" in HTML format.`,
+            },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.error?.message || "Failed to generate content with DeepSeek.",
+        );
+      }
+
+      const data = await res.json();
+      return (data.choices?.[0]?.message?.content || "").trim();
+    };
 
     try {
       let contentHtml = "";
+      const activeKey = aiApiKey;
 
-      if (aiProvider === "pollinations") {
-        const res = await fetch("https://text.pollinations.ai/", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt,
-              },
-              {
-                role: "user",
-                content: `Generate a blog post about "${topic}" in HTML format.`,
-              },
-            ],
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error("Pollinations API failed to respond.");
-        }
-
-        const text = await res.text();
+      if (aiProvider === "grok") {
+        const text = await generateGrok(activeKey);
         contentHtml = text
           .replace(/^```html\s*/i, "")
           .replace(/```\s*$/i, "")
           .trim();
-      } else if (aiProvider === "gemini") {
-        if (!aiApiKey) {
-          throw new Error(
-            "Gemini API key is required. Please set it in Settings.",
+      } else if (aiProvider === "deepseek") {
+        try {
+          const text = await generateDeepseek(activeKey);
+          contentHtml = text
+            .replace(/^```html\s*/i, "")
+            .replace(/```\s*$/i, "")
+            .trim();
+        } catch (deepseekError: any) {
+          console.warn(
+            "DeepSeek failed. Falling back to Grok/Groq:",
+            deepseekError,
           );
-        }
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApiKey}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: systemPrompt }] }],
-            }),
-          },
-        );
+          toast.error("DeepSeek API failed, falling back to Grok/Grok...", {
+            id: toastId,
+          });
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(
-            errData.error?.message || "Failed to generate content with Gemini.",
-          );
+          const text = await generateGrok(activeKey);
+          contentHtml = text
+            .replace(/^```html\s*/i, "")
+            .replace(/```\s*$/i, "")
+            .trim();
         }
-
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        contentHtml = text
-          .replace(/^```html\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
       } else {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (aiApiKey) {
-          headers["Authorization"] = `Bearer ${aiApiKey}`;
-        }
-        const res = await fetch(
-          "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta",
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              inputs: `<|system|>\n${systemPrompt}</s>\n<|user|>\nWrite the blog post in HTML format.</s>\n<|assistant|>\n`,
-              parameters: {
-                max_new_tokens: 800,
-                temperature: 0.7,
-              },
-            }),
-          },
-        );
-
-        if (!res.ok) {
-          throw new Error("Hugging Face API inference failed.");
-        }
-
-        const data = await res.json();
-        const generatedText = Array.isArray(data)
-          ? data[0]?.generated_text
-          : data?.generated_text;
-
-        if (!generatedText) {
-          throw new Error("Empty response from Hugging Face.");
-        }
-
-        const assistantMarker = "<|assistant|>";
-        const rawHtml = generatedText.includes(assistantMarker)
-          ? generatedText.split(assistantMarker).pop() || ""
-          : generatedText;
-
-        contentHtml = rawHtml
-          .replace(/^```html\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
+        throw new Error(`Unsupported AI provider: ${aiProvider}`);
       }
 
       if (!contentHtml) {
@@ -2019,7 +2041,9 @@ export function BlogEditor() {
           ) : (
             <div className="max-w-[760px] mx-auto px-6 sm:px-8 md:px-12 py-10 md:py-16">
               {/* Cover Image */}
-              {coverImage ? (
+              {loading ? (
+                <div className="w-full h-[240px] bg-muted rounded-xl mb-10 animate-pulse" />
+              ) : coverImage ? (
                 <div className="relative group mb-10">
                   <img
                     src={getBlogImageUrl(coverImage)}
@@ -2059,619 +2083,640 @@ export function BlogEditor() {
               )}
 
               {/* Title Input */}
-              <textarea
-                placeholder="Article Title"
-                className="w-full text-4xl md:text-5xl font-black tracking-tight bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-10 placeholder:font-black resize-none overflow-hidden min-h-[60px]"
-                rows={1}
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                }}
-                ref={(el) => {
-                  if (el) {
-                    el.style.height = "auto";
-                    el.style.height = `${el.scrollHeight}px`;
-                  }
-                }}
-              />
+              {loading ? (
+                <div className="h-12 w-3/4 rounded bg-muted mb-10 animate-pulse" />
+              ) : (
+                <textarea
+                  placeholder="Article Title"
+                  className="w-full text-4xl md:text-5xl font-black tracking-tight bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-10 placeholder:font-black resize-none overflow-hidden min-h-[60px]"
+                  rows={1}
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  ref={(el) => {
+                    if (el) {
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }
+                  }}
+                />
+              )}
 
-              {/* Sticky Toolbar Mock */}
-              <div className="sticky top-0 sm:top-2 z-20 mb-8 flex flex-wrap items-center gap-1 rounded-md border border-border bg-background p-1">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-muted-foreground hover:text-foreground"
-                    >
-                      {activeFormats.h1
-                        ? "Heading 1"
-                        : activeFormats.h2
-                          ? "Heading 2"
-                          : activeFormats.h3
-                            ? "Heading 3"
-                            : "Normal text"}
-                      <ChevronDown className="ml-2 h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="min-w-[150px]">
-                    <DropdownMenuItem
-                      className="font-sans"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => executeCommand("formatBlock", "p")}
-                    >
-                      Normal text
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-2xl font-bold"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => executeCommand("formatBlock", "h1")}
-                    >
-                      Heading 1
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-xl font-bold"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => executeCommand("formatBlock", "h2")}
-                    >
-                      Heading 2
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-lg font-bold"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => executeCommand("formatBlock", "h3")}
-                    >
-                      Heading 3
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <div className="w-px h-4 bg-border mx-1"></div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("bold")}
-                  title="Bold (Ctrl+B)"
-                >
-                  <Bold className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("italic")}
-                  title="Italic (Ctrl+I)"
-                >
-                  <Italic className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("underline")}
-                  title="Underline (Ctrl+U)"
-                >
-                  <Underline className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("formatBlock", "pre")}
-                  title="Code Block"
-                >
-                  <Code className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleLinkClick}
-                  title="Link"
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </Button>
-
-                <div className="w-px h-4 bg-border mx-1"></div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.ul ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("insertUnorderedList")}
-                  title="Bulleted List"
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.ol ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("insertOrderedList")}
-                  title="Numbered List"
-                >
-                  <ListOrdered className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("formatBlock", "blockquote")}
-                  title="Quote"
-                >
-                  <Quote className="h-4 w-4" />
-                </Button>
-
-                <div className="w-px h-4 bg-border mx-1"></div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleImageClick}
-                  title="Image"
-                >
-                  <ImageIcon className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleVideoClick}
-                  title="Insert Video"
-                >
-                  <Video className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    insertHTML(
-                      '<table class="min-w-full divide-y divide-border border rounded-md my-4"><thead><tr class="bg-muted/50"><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 1</th><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 2</th></tr></thead><tbody class="divide-y divide-border"><tr><td class="px-4 py-2 text-sm border">Data 1</td><td class="px-4 py-2 text-sm border">Data 2</td></tr></tbody></table>',
-                    )
-                  }
-                  title="Table"
-                >
-                  <Table className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("insertHorizontalRule")}
-                  title="Divider"
-                >
-                  <Minus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Button
-                variant="default"
-                className="w-full mb-2"
-                onClick={handleAiGenerate}
-              >
-                <Bot className="h-4 w-4" />
-                Start Ai Generated Content
-              </Button>
-              {/* Rich Text Area */}
-              {!isHtmlMode ? (
-                <div className="relative">
-                  <div
-                    ref={editorRef}
-                    className="prose prose-lg dark:prose-invert min-w-full text-slate-800 dark:text-slate-200 min-h-[400px] outline-none relative"
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={(e) => setContent(e.currentTarget.innerHTML)}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                  />
-                  {bubbleMenuRect && (
-                    <div
-                      className="absolute bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 z-50 transform -translate-x-1/2 -translate-y-full bubble-menu-overlay"
-                      style={{
-                        top: bubbleMenuRect.top,
-                        left: bubbleMenuRect.left,
-                      }}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("bold")}
-                        title="Bold"
-                      >
-                        <Bold className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("italic")}
-                        title="Italic"
-                      >
-                        <Italic className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("underline")}
-                        title="Underline"
-                      >
-                        <Underline className="h-4 w-4" />
-                      </Button>
-                      <div className="w-px h-4 bg-border/50 mx-1"></div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 font-bold ${activeFormats.h2 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("formatBlock", "h2")}
-                        title="Heading 2"
-                      >
-                        H2
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 font-bold ${activeFormats.h3 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("formatBlock", "h3")}
-                        title="Heading 3"
-                      >
-                        H3
-                      </Button>
-                      <div className="w-px h-4 bg-border/50 mx-1"></div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() =>
-                          executeCommand("formatBlock", "blockquote")
-                        }
-                        title="Blockquote"
-                      >
-                        <Quote className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground"}`}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("formatBlock", "pre")}
-                        title="Code"
-                      >
-                        <Code className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={handleLinkClick}
-                        title="Insert Link"
-                      >
-                        <LinkIcon className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={handleVideoClick}
-                        title="Insert Video"
-                      >
-                        <Video className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                  {activeLink && linkRect && (
-                    <div
-                      className="absolute bg-background border border-border shadow-md rounded-md p-2 flex items-center gap-2 z-50 link-control-overlay"
-                      style={{
-                        top: linkRect.top,
-                        left: linkRect.left,
-                      }}
-                    >
-                      <a
-                        href={activeLink.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-blue-600 hover:underline max-w-[200px] truncate"
-                      >
-                        {activeLink.href}
-                      </a>
-                      <div className="w-px h-4 bg-border/50 mx-1"></div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          const text = document.createTextNode(
-                            activeLink.textContent || "",
-                          );
-                          activeLink.parentNode?.replaceChild(text, activeLink);
-                          setActiveLink(null);
-                          if (editorRef.current)
-                            setContent(editorRef.current.innerHTML);
-                        }}
-                        title="Remove Link"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                  {activeMedia && mediaRect && (
-                    <div
-                      className="absolute pointer-events-none border-2 border-primary image-control-overlay rounded-md"
-                      style={{
-                        top: mediaRect.top,
-                        left: mediaRect.left,
-                        width: mediaRect.width,
-                        height: mediaRect.height,
-                        zIndex: 40,
-                      }}
-                    >
-                      {/* Toolbar */}
-                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Move Up"
-                          onClick={() => moveMedia("up")}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Move Down"
-                          onClick={() => moveMedia("down")}
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                        <div className="w-px h-4 bg-border/50 mx-1"></div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Align Left"
-                          onClick={() => {
-                            activeMedia.style.display = "inline";
-                            activeMedia.style.float = "left";
-                            activeMedia.style.margin = "0 1rem 1rem 0";
-                            activeMedia.style.width = "40%";
-                            setTimeout(updateActiveMediaRect, 0);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <AlignLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Align Center"
-                          onClick={() => {
-                            activeMedia.style.display = "block";
-                            activeMedia.style.float = "none";
-                            activeMedia.style.margin = "1rem auto";
-                            activeMedia.style.width = "75%";
-                            setTimeout(updateActiveMediaRect, 0);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <AlignCenter className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Align Right"
-                          onClick={() => {
-                            activeMedia.style.display = "inline";
-                            activeMedia.style.float = "right";
-                            activeMedia.style.margin = "0 0 1rem 1rem";
-                            activeMedia.style.width = "40%";
-                            setTimeout(updateActiveMediaRect, 0);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <AlignRight className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Full Width"
-                          onClick={() => {
-                            activeMedia.style.display = "block";
-                            activeMedia.style.float = "none";
-                            activeMedia.style.margin = "1rem 0";
-                            activeMedia.style.width = "100%";
-                            setTimeout(updateActiveMediaRect, 0);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <AlignJustify className="h-4 w-4" />
-                        </Button>
-                        <div className="w-px h-4 bg-border/50 mx-1"></div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          title="Delete Block"
-                          onClick={() => {
-                            activeMedia.remove();
-                            setActiveMedia(null);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      {/* Drag Resize Handles */}
-                      {/* Corners */}
-                      <div
-                        className="absolute top-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-nw-resize -mt-1.5 -ml-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
-                      />
-                      <div
-                        className="absolute top-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-ne-resize -mt-1.5 -mr-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
-                      />
-                      <div
-                        className="absolute bottom-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-se-resize -mb-1.5 -mr-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "se")}
-                      />
-                      <div
-                        className="absolute bottom-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-sw-resize -mb-1.5 -ml-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
-                      />
-                      {/* Sides */}
-                      <div
-                        className="absolute top-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-n-resize -mt-1.5 -ml-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "n")}
-                      />
-                      <div
-                        className="absolute bottom-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-s-resize -mb-1.5 -ml-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "s")}
-                      />
-                      <div
-                        className="absolute top-1/2 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-e-resize -mt-1.5 -mr-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "e")}
-                      />
-                      <div
-                        className="absolute top-1/2 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-w-resize -mt-1.5 -ml-1.5 pointer-events-auto"
-                        onMouseDown={(e) => handleResizeMouseDown(e, "w")}
-                      />
-                    </div>
-                  )}
-                  {activeTable && tableRect && (
-                    <div
-                      className="absolute pointer-events-none border-2 border-dashed border-primary/50 table-control-overlay rounded-md"
-                      style={{
-                        top: tableRect.top,
-                        left: tableRect.left,
-                        width: tableRect.width,
-                        height: tableRect.height,
-                        zIndex: 40,
-                      }}
-                    >
-                      {/* Floating Toolbar above the Table */}
-                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Move Up"
-                          onClick={() => moveTable("up")}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Move Down"
-                          onClick={() => moveTable("down")}
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                        <div className="w-px h-4 bg-border/50 mx-1"></div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-                          title="Add Row"
-                          onClick={() => addRow("below")}
-                        >
-                          Row +
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-                          title="Add Column"
-                          onClick={addColumn}
-                        >
-                          Col +
-                        </Button>
-                        <div className="w-px h-4 bg-border/50 mx-1"></div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
-                          title="Delete Row"
-                          onClick={deleteRow}
-                        >
-                          Row -
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
-                          title="Delete Column"
-                          onClick={deleteColumn}
-                        >
-                          Col -
-                        </Button>
-                        <div className="w-px h-4 bg-border/50 mx-1"></div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          title="Delete Table"
-                          onClick={() => {
-                            activeTable.remove();
-                            setActiveTable(null);
-                            if (editorRef.current)
-                              setContent(editorRef.current.innerHTML);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+              {loading ? (
+                <div className="space-y-4 animate-pulse">
+                  <div className="flex flex-wrap gap-1 p-1 bg-muted/40 border rounded-lg h-10 w-full mb-6"></div>
+                  <div className="h-4 w-full rounded bg-muted"></div>
+                  <div className="h-4 w-full rounded bg-muted"></div>
+                  <div className="h-4 w-5/6 rounded bg-muted"></div>
+                  <div className="h-4 w-2/3 rounded bg-muted"></div>
                 </div>
               ) : (
-                <div className="prose prose-lg dark:prose-invert min-w-full min-h-[400px] outline-none relative font-mono text-sm">
-                  <textarea
-                    className="w-full min-h-[400px] outline-none resize-none bg-muted/20 p-4 rounded-lg"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    spellCheck={false}
-                  />
-                </div>
+                <>
+                  {/* Sticky Toolbar Mock */}
+                  <div className="sticky top-0 sm:top-2 z-20 mb-8 flex flex-wrap items-center gap-1 rounded-md border border-border bg-background p-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                        >
+                          {activeFormats.h1
+                            ? "Heading 1"
+                            : activeFormats.h2
+                              ? "Heading 2"
+                              : activeFormats.h3
+                                ? "Heading 3"
+                                : "Normal text"}
+                          <ChevronDown className="ml-2 h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="min-w-[150px]">
+                        <DropdownMenuItem
+                          className="font-sans"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => executeCommand("formatBlock", "p")}
+                        >
+                          Normal text
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-2xl font-bold"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => executeCommand("formatBlock", "h1")}
+                        >
+                          Heading 1
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-xl font-bold"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => executeCommand("formatBlock", "h2")}
+                        >
+                          Heading 2
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-lg font-bold"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => executeCommand("formatBlock", "h3")}
+                        >
+                          Heading 3
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <div className="w-px h-4 bg-border mx-1"></div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("bold")}
+                      title="Bold (Ctrl+B)"
+                    >
+                      <Bold className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("italic")}
+                      title="Italic (Ctrl+I)"
+                    >
+                      <Italic className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("underline")}
+                      title="Underline (Ctrl+U)"
+                    >
+                      <Underline className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("formatBlock", "pre")}
+                      title="Code Block"
+                    >
+                      <Code className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleLinkClick}
+                      title="Link"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-4 bg-border mx-1"></div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.ul ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("insertUnorderedList")}
+                      title="Bulleted List"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.ol ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("insertOrderedList")}
+                      title="Numbered List"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() =>
+                        executeCommand("formatBlock", "blockquote")
+                      }
+                      title="Quote"
+                    >
+                      <Quote className="h-4 w-4" />
+                    </Button>
+
+                    <div className="w-px h-4 bg-border mx-1"></div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleImageClick}
+                      title="Image"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleVideoClick}
+                      title="Insert Video"
+                    >
+                      <Video className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() =>
+                        insertHTML(
+                          '<table class="min-w-full divide-y divide-border border rounded-md my-4"><thead><tr class="bg-muted/50"><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 1</th><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 2</th></tr></thead><tbody class="divide-y divide-border"><tr><td class="px-4 py-2 text-sm border">Data 1</td><td class="px-4 py-2 text-sm border">Data 2</td></tr></tbody></table>',
+                        )
+                      }
+                      title="Table"
+                    >
+                      <Table className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => executeCommand("insertHorizontalRule")}
+                      title="Divider"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button
+                    variant="default"
+                    className="w-full mb-10"
+                    onClick={handleAiGenerate}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Start Ai Generated Content
+                  </Button>
+                  {/* Rich Text Area */}
+                  {!isHtmlMode ? (
+                    <div className="relative">
+                      <div
+                        ref={editorRef}
+                        className="prose prose-lg dark:prose-invert min-w-full text-slate-800 dark:text-slate-200 min-h-[400px] outline-none relative"
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
+                      />
+                      {bubbleMenuRect && (
+                        <div
+                          className="absolute bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 z-50 transform -translate-x-1/2 -translate-y-full bubble-menu-overlay"
+                          style={{
+                            top: bubbleMenuRect.top,
+                            left: bubbleMenuRect.left,
+                          }}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("bold")}
+                            title="Bold"
+                          >
+                            <Bold className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("italic")}
+                            title="Italic"
+                          >
+                            <Italic className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("underline")}
+                            title="Underline"
+                          >
+                            <Underline className="h-4 w-4" />
+                          </Button>
+                          <div className="w-px h-4 bg-border/50 mx-1"></div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 font-bold ${activeFormats.h2 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("formatBlock", "h2")}
+                            title="Heading 2"
+                          >
+                            H2
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 font-bold ${activeFormats.h3 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("formatBlock", "h3")}
+                            title="Heading 3"
+                          >
+                            H3
+                          </Button>
+                          <div className="w-px h-4 bg-border/50 mx-1"></div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() =>
+                              executeCommand("formatBlock", "blockquote")
+                            }
+                            title="Blockquote"
+                          >
+                            <Quote className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => executeCommand("formatBlock", "pre")}
+                            title="Code"
+                          >
+                            <Code className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={handleLinkClick}
+                            title="Insert Link"
+                          >
+                            <LinkIcon className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={handleVideoClick}
+                            title="Insert Video"
+                          >
+                            <Video className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      {activeLink && linkRect && (
+                        <div
+                          className="absolute bg-background border border-border shadow-md rounded-md p-2 flex items-center gap-2 z-50 link-control-overlay"
+                          style={{
+                            top: linkRect.top,
+                            left: linkRect.left,
+                          }}
+                        >
+                          <a
+                            href={activeLink.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm text-blue-600 hover:underline max-w-[200px] truncate"
+                          >
+                            {activeLink.href}
+                          </a>
+                          <div className="w-px h-4 bg-border/50 mx-1"></div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                            onClick={() => {
+                              const text = document.createTextNode(
+                                activeLink.textContent || "",
+                              );
+                              activeLink.parentNode?.replaceChild(
+                                text,
+                                activeLink,
+                              );
+                              setActiveLink(null);
+                              if (editorRef.current)
+                                setContent(editorRef.current.innerHTML);
+                            }}
+                            title="Remove Link"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                      {activeMedia && mediaRect && (
+                        <div
+                          className="absolute pointer-events-none border-2 border-primary image-control-overlay rounded-md"
+                          style={{
+                            top: mediaRect.top,
+                            left: mediaRect.left,
+                            width: mediaRect.width,
+                            height: mediaRect.height,
+                            zIndex: 40,
+                          }}
+                        >
+                          {/* Toolbar */}
+                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Move Up"
+                              onClick={() => moveMedia("up")}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Move Down"
+                              onClick={() => moveMedia("down")}
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                            <div className="w-px h-4 bg-border/50 mx-1"></div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Align Left"
+                              onClick={() => {
+                                activeMedia.style.display = "inline";
+                                activeMedia.style.float = "left";
+                                activeMedia.style.margin = "0 1rem 1rem 0";
+                                activeMedia.style.width = "40%";
+                                setTimeout(updateActiveMediaRect, 0);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <AlignLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Align Center"
+                              onClick={() => {
+                                activeMedia.style.display = "block";
+                                activeMedia.style.float = "none";
+                                activeMedia.style.margin = "1rem auto";
+                                activeMedia.style.width = "75%";
+                                setTimeout(updateActiveMediaRect, 0);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <AlignCenter className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Align Right"
+                              onClick={() => {
+                                activeMedia.style.display = "inline";
+                                activeMedia.style.float = "right";
+                                activeMedia.style.margin = "0 0 1rem 1rem";
+                                activeMedia.style.width = "40%";
+                                setTimeout(updateActiveMediaRect, 0);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <AlignRight className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Full Width"
+                              onClick={() => {
+                                activeMedia.style.display = "block";
+                                activeMedia.style.float = "none";
+                                activeMedia.style.margin = "1rem 0";
+                                activeMedia.style.width = "100%";
+                                setTimeout(updateActiveMediaRect, 0);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <AlignJustify className="h-4 w-4" />
+                            </Button>
+                            <div className="w-px h-4 bg-border/50 mx-1"></div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              title="Delete Block"
+                              onClick={() => {
+                                activeMedia.remove();
+                                setActiveMedia(null);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          {/* Drag Resize Handles */}
+                          {/* Corners */}
+                          <div
+                            className="absolute top-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-nw-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+                          />
+                          <div
+                            className="absolute top-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-ne-resize -mt-1.5 -mr-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+                          />
+                          <div
+                            className="absolute bottom-0 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-se-resize -mb-1.5 -mr-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+                          />
+                          <div
+                            className="absolute bottom-0 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-sw-resize -mb-1.5 -ml-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+                          />
+                          {/* Sides */}
+                          <div
+                            className="absolute top-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-n-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "n")}
+                          />
+                          <div
+                            className="absolute bottom-0 left-1/2 w-3 h-3 bg-primary border border-background rounded-full cursor-s-resize -mb-1.5 -ml-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "s")}
+                          />
+                          <div
+                            className="absolute top-1/2 right-0 w-3 h-3 bg-primary border border-background rounded-full cursor-e-resize -mt-1.5 -mr-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "e")}
+                          />
+                          <div
+                            className="absolute top-1/2 left-0 w-3 h-3 bg-primary border border-background rounded-full cursor-w-resize -mt-1.5 -ml-1.5 pointer-events-auto"
+                            onMouseDown={(e) => handleResizeMouseDown(e, "w")}
+                          />
+                        </div>
+                      )}
+                      {activeTable && tableRect && (
+                        <div
+                          className="absolute pointer-events-none border-2 border-dashed border-primary/50 table-control-overlay rounded-md"
+                          style={{
+                            top: tableRect.top,
+                            left: tableRect.left,
+                            width: tableRect.width,
+                            height: tableRect.height,
+                            zIndex: 40,
+                          }}
+                        >
+                          {/* Floating Toolbar above the Table */}
+                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 pointer-events-auto">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Move Up"
+                              onClick={() => moveTable("up")}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              title="Move Down"
+                              onClick={() => moveTable("down")}
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                            <div className="w-px h-4 bg-border/50 mx-1"></div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                              title="Add Row"
+                              onClick={() => addRow("below")}
+                            >
+                              Row +
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                              title="Add Column"
+                              onClick={addColumn}
+                            >
+                              Col +
+                            </Button>
+                            <div className="w-px h-4 bg-border/50 mx-1"></div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                              title="Delete Row"
+                              onClick={deleteRow}
+                            >
+                              Row -
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 gap-1"
+                              title="Delete Column"
+                              onClick={deleteColumn}
+                            >
+                              Col -
+                            </Button>
+                            <div className="w-px h-4 bg-border/50 mx-1"></div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              title="Delete Table"
+                              onClick={() => {
+                                activeTable.remove();
+                                setActiveTable(null);
+                                if (editorRef.current)
+                                  setContent(editorRef.current.innerHTML);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="prose prose-lg dark:prose-invert min-w-full min-h-[400px] outline-none relative font-mono text-sm">
+                      <textarea
+                        className="w-full min-h-[400px] outline-none resize-none bg-muted/20 p-4 rounded-lg"
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -2708,11 +2753,15 @@ export function BlogEditor() {
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Slug</label>
-                <Input
-                  placeholder="my-awesome-post"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                />
+                {loading ? (
+                  <div className="h-10 w-full rounded bg-muted animate-pulse" />
+                ) : (
+                  <Input
+                    placeholder="my-awesome-post"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -2733,9 +2782,14 @@ export function BlogEditor() {
                 <label className="text-sm font-medium mr-5">Status</label>
                 <div className="w-full">
                   <DropdownMenu>
-                    <DropdownMenuTrigger className="w-full">
-                      <Button variant="outline" className="w-full !text-start">
+                    <DropdownMenuTrigger className="w-full" asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
                         {status.charAt(0).toUpperCase() + status.slice(1)}
+                        <ChevronDown className="h-4 w-4 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
@@ -2745,6 +2799,9 @@ export function BlogEditor() {
                       <DropdownMenuItem onClick={() => setStatus("published")}>
                         Published
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setStatus("archived")}>
+                        Archived
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -2752,12 +2809,16 @@ export function BlogEditor() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Excerpt</label>
-                <textarea
-                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="A short summary of your post..."
-                  value={excerpt}
-                  onChange={(e) => setExcerpt(e.target.value)}
-                />
+                {loading ? (
+                  <div className="h-24 w-full rounded bg-muted animate-pulse" />
+                ) : (
+                  <textarea
+                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="A short summary of your post..."
+                    value={excerpt}
+                    onChange={(e) => setExcerpt(e.target.value)}
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -2872,6 +2933,34 @@ export function BlogEditor() {
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
             />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Status</label>
+            <div className="w-full">
+              <DropdownMenu>
+                <DropdownMenuTrigger className="w-full" asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between"
+                  >
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                  <DropdownMenuItem onClick={() => setStatus("draft")}>
+                    Draft
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setStatus("published")}>
+                    Published
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setStatus("archived")}>
+                    Archived
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </Modal>
@@ -3048,6 +3137,7 @@ export function BlogEditor() {
         footer={
           <div className="flex justify-end gap-2 pt-2">
             <Button
+              type="button"
               variant="outline"
               onClick={() => setIsAiModalOpen(false)}
               disabled={isGeneratingAi}
@@ -3055,6 +3145,7 @@ export function BlogEditor() {
               Cancel
             </Button>
             <Button
+              type="button"
               onClick={submitAiGenerate}
               disabled={isGeneratingAi || (!title.trim() && !aiPrompt.trim())}
               className="gap-2"
@@ -3072,63 +3163,48 @@ export function BlogEditor() {
               <span>API Settings</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
-                variant={
-                  aiProvider === "pollinations" ? "secondary" : "outline"
-                }
-                className="h-8 text-[10px] justify-center px-1"
+                variant={aiProvider === "deepseek" ? "secondary" : "outline"}
+                className="h-8 text-xs justify-center px-1"
                 onClick={() => {
-                  setAiProvider("pollinations");
-                  localStorage.setItem("ai_provider", "pollinations");
+                  setAiProvider("deepseek");
+                  localStorage.setItem("ai_provider", "deepseek");
                 }}
               >
-                Free AI (No Key)
+                DeepSeek
               </Button>
               <Button
                 type="button"
-                variant={aiProvider === "huggingface" ? "secondary" : "outline"}
-                className="h-8 text-[10px] justify-center px-1"
+                variant={aiProvider === "grok" ? "secondary" : "outline"}
+                className="h-8 text-xs justify-center px-1"
                 onClick={() => {
-                  setAiProvider("huggingface");
-                  localStorage.setItem("ai_provider", "huggingface");
+                  setAiProvider("grok");
+                  localStorage.setItem("ai_provider", "grok");
                 }}
               >
-                HuggingFace
-              </Button>
-              <Button
-                type="button"
-                variant={aiProvider === "gemini" ? "secondary" : "outline"}
-                className="h-8 text-[10px] justify-center px-1"
-                onClick={() => {
-                  setAiProvider("gemini");
-                  localStorage.setItem("ai_provider", "gemini");
-                }}
-              >
-                Gemini API
+                Groq / Grok
               </Button>
             </div>
 
-            {aiProvider !== "pollinations" && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  {aiProvider === "gemini"
-                    ? "Gemini API Key (Required)"
-                    : "HuggingFace Token (Optional)"}
-                </label>
-                <Input
-                  type="password"
-                  placeholder={aiProvider === "gemini" ? "AIzaSy..." : "hf_..."}
-                  value={aiApiKey}
-                  onChange={(e) => {
-                    setAiApiKey(e.target.value);
-                    localStorage.setItem("ai_api_key", e.target.value);
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                {aiProvider === "grok"
+                  ? "Groq / Grok API Key (Optional if VITE_GROK_API_KEY is set)"
+                  : "DeepSeek / OpenRouter Key (Optional if VITE_DEEPSEEK_API_KEY is set)"}
+              </label>
+              <Input
+                type="password"
+                placeholder={aiProvider === "grok" ? "gsk_..." : "sk-or-v1-..."}
+                value={aiApiKey}
+                onChange={(e) => {
+                  setAiApiKey(e.target.value);
+                  localStorage.setItem("ai_api_key", e.target.value);
+                }}
+                className="h-8 text-xs"
+              />
+            </div>
           </div>
 
           <div className="space-y-1">

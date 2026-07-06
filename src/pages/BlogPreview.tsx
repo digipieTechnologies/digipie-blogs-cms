@@ -41,7 +41,7 @@ export function BlogPreview() {
     excerpt: "",
     content: "Start writing..",
     coverImage: "",
-    category: "Engineering",
+    category: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     tags: [],
