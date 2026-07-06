@@ -9,9 +9,12 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Tag,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +36,7 @@ const navigation = [
 export function TopNav() {
   const location = useLocation();
   const { signOut, user, profile } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [blogsCount, setBlogsCount] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -126,6 +130,17 @@ export function TopNav() {
           )}
         </h1>
         <div className="ml-auto flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="rounded-full h-8 w-8 text-muted-foreground hover:text-foreground relative flex items-center justify-center"
+          >
+            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Avatar className="h-8 w-8 cursor-pointer ring-1 ring-border/50 hover:ring-border transition-all">

@@ -8,13 +8,23 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Camera, Loader2, KeyRound, User } from "lucide-react";
+import {
+  Camera,
+  Loader2,
+  KeyRound,
+  User,
+  Sun,
+  Moon,
+  Monitor,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export function Settings() {
   const { user, profile, refreshProfile } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   // Profile state
   const [name, setName] = useState("Admin User");
@@ -266,6 +276,66 @@ export function Settings() {
                 Change Password
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Theme Settings Card */}
+        <Card className="subtle-shadow bg-background/50 backdrop-blur-sm md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5 text-primary dark:hidden" />
+              <Moon className="h-5 w-5 text-primary hidden dark:block" />
+              Appearance Settings
+            </CardTitle>
+            <CardDescription>
+              Customize the appearance of the application. Select your preferred
+              color mode.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <button
+                onClick={() => setTheme("light")}
+                className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 ${
+                  theme === "light"
+                    ? "border-primary bg-primary/5 text-primary shadow-sm"
+                    : "border-border hover:border-primary/50 hover:bg-muted/30 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="p-3 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
+                  <Sun className="h-6 w-6" />
+                </div>
+                <span className="font-medium text-sm">Light Mode</span>
+              </button>
+
+              <button
+                onClick={() => setTheme("dark")}
+                className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 ${
+                  theme === "dark"
+                    ? "border-primary bg-primary/5 text-primary shadow-sm"
+                    : "border-border hover:border-primary/50 hover:bg-muted/30 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
+                  <Moon className="h-6 w-6" />
+                </div>
+                <span className="font-medium text-sm">Dark Mode</span>
+              </button>
+
+              <button
+                onClick={() => setTheme("system")}
+                className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 ${
+                  theme === "system"
+                    ? "border-primary bg-primary/5 text-primary shadow-sm"
+                    : "border-border hover:border-primary/50 hover:bg-muted/30 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="p-3 rounded-full bg-gray-100 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300">
+                  <Monitor className="h-6 w-6" />
+                </div>
+                <span className="font-medium text-sm">System</span>
+              </button>
+            </div>
           </CardContent>
         </Card>
       </div>

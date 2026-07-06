@@ -1442,12 +1442,15 @@ export function BlogEditor() {
       content,
       coverImage: finalCoverImage,
       category: categoriesArray,
-      status: "draft" as const,
+      status: status,
       tags: tagsArray,
       authorId: user?.id,
       author_name: user?.user_metadata.name || "Admin",
       readingTime: "5 min",
-      createdAt: new Date().toISOString(),
+      createdAt:
+        isEditing && fetchedBlog?.createdAt
+          ? fetchedBlog.createdAt
+          : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastEdit: user?.user_metadata.name || "Admin",
     };
@@ -1503,12 +1506,15 @@ export function BlogEditor() {
       content,
       coverImage: finalCoverImage,
       category: categoriesArray,
-      status: "draft" as const,
+      status: status,
       tags: tagsArray,
       authorId: user?.id,
       author_name: user?.user_metadata.name || "Admin",
       readingTime: "5 min",
-      createdAt: new Date().toISOString(),
+      createdAt:
+        isEditing && fetchedBlog?.createdAt
+          ? fetchedBlog.createdAt
+          : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastEdit: user?.user_metadata.name || "Admin",
     };
@@ -1582,7 +1588,8 @@ export function BlogEditor() {
 
   // Debounced Auto-Save
   useEffect(() => {
-    if (loading || !content || content === "Start writing..") return;
+    if (loading || !content || content === "Start writing.." || showExitDialog)
+      return;
 
     const timeoutId = setTimeout(() => {
       // Don't auto-save if we haven't typed anything meaningful
@@ -1592,7 +1599,15 @@ export function BlogEditor() {
     }, 5000);
 
     return () => clearTimeout(timeoutId);
-  }, [content, title, coverImage, category, tagsString, excerpt]);
+  }, [
+    content,
+    title,
+    coverImage,
+    category,
+    tagsString,
+    excerpt,
+    showExitDialog,
+  ]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -1626,7 +1641,10 @@ export function BlogEditor() {
         authorId: user?.id,
         author_name: user?.user_metadata.name || "Admin",
         readingTime: "5 min",
-        createdAt: new Date().toISOString(),
+        createdAt:
+          isEditing && fetchedBlog?.createdAt
+            ? fetchedBlog.createdAt
+            : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         lastEdit: user?.user_metadata.name || "Admin",
       };
@@ -2860,11 +2878,11 @@ export function BlogEditor() {
         <div className="fixed inset-0 m-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-background border border-border p-6 rounded-xl shadow-lg max-w-md w-full mx-4 space-y-4 animate-in zoom-in-95 duration-200">
             <h3 className="text-lg font-semibold text-foreground">
-              Save as Draft?
+              {status === "draft" ? "Save as Draft?" : "Save Changes?"}
             </h3>
             <p className="text-sm text-muted-foreground">
-              You have unsaved changes. Do you want to save this post as a draft
-              before leaving?
+              You have unsaved changes. Do you want to save this post before
+              leaving?
             </p>
             <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
               <Button
@@ -2889,7 +2907,7 @@ export function BlogEditor() {
                 className="gap-2"
               >
                 {isSavingDraft && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save as Draft
+                {status === "draft" ? "Save as Draft" : "Save Changes"}
               </Button>
             </div>
           </div>

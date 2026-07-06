@@ -22,7 +22,7 @@ export function Sidebar() {
   const location = useLocation();
 
   return (
-    <div className="hidden md:flex h-screen w-64 flex-col border-r bg-white backdrop-blur-xl shrink-0">
+    <div className="hidden md:flex h-screen w-64 flex-col border-r border-border/55 bg-background/80 dark:bg-card/40 backdrop-blur-xl shrink-0">
       <div className="flex h-16 items-center px-6 border-b border-border/50">
         <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
           <div className="">
