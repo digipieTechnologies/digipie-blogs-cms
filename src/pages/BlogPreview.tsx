@@ -82,16 +82,21 @@ export function BlogPreview() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-background">
       {/* Sticky top bar just for admin */}
-      <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-[#E2E8F0] bg-white/80 px-6 backdrop-blur-xl">
+      <div className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-[#E2E8F0] dark:border-border/50 bg-white/80 dark:bg-card/80 px-6 backdrop-blur-xl">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild className="rounded-full">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="rounded-full text-foreground hover:text-foreground/80"
+          >
             <Link to="/blogs">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="text-sm font-medium text-[#0A1128]">
+          <span className="text-sm font-medium text-[#0A1128] dark:text-foreground">
             Preview Mode
           </span>
         </div>
