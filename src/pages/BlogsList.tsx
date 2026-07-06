@@ -281,10 +281,13 @@ export function BlogsList() {
       header: "Created",
       cellClassName: "whitespace-nowrap text-muted-foreground",
       cell: (blog) =>
-        new Date(blog.createdAt).toLocaleDateString(undefined, {
+        new Date(blog.createdAt).toLocaleString(undefined, {
           month: "short",
           day: "numeric",
           year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
         }),
     },
     {
@@ -292,10 +295,13 @@ export function BlogsList() {
       cellClassName: "whitespace-nowrap text-muted-foreground",
       cell: (blog) =>
         blog.publishedAt ? (
-          new Date(blog.publishedAt).toLocaleDateString(undefined, {
+          new Date(blog.publishedAt).toLocaleString(undefined, {
             month: "short",
             day: "numeric",
             year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
           })
         ) : (
           <span className="text-xs text-muted-foreground italic">Draft</span>

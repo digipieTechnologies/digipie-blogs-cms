@@ -33,6 +33,11 @@ import {
   Video,
   ArrowUp,
   ArrowDown,
+  Heading1,
+  Heading2,
+  Heading3,
+  Type,
+  Bot,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BlogDetailPreview } from "@/components/BlogDetailPreview";
@@ -131,6 +136,570 @@ export function BlogEditor() {
   const [activeMedia, setActiveMedia] = useState<HTMLElement | null>(null);
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
+  // AI Generation States
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiProvider, setAiProvider] = useState(
+    () => localStorage.getItem("ai_provider") || "pollinations",
+  );
+  const [aiApiKey, setAiApiKey] = useState(
+    () => localStorage.getItem("ai_api_key") || "",
+  );
+
+  const handleAiGenerate = () => {
+    setIsAiModalOpen(true);
+  };
+
+  const submitAiGenerate = async () => {
+    if (!title.trim() && !aiPrompt.trim()) {
+      toast.error("Please enter a title or a prompt first.");
+      return;
+    }
+    setIsGeneratingAi(true);
+    const toastId = toast.loading("AI is crafting your post...");
+
+    const topic = title.trim() || aiPrompt.trim();
+    const systemPrompt = `You are a professional blog content writer. Write a comprehensive, detailed blog post about "${topic}". Instruction details: ${aiPrompt || "Write a detailed tutorial/guide style blog post"}. You MUST return the output ONLY as HTML content. Use tags like <h2>, <h3>, <p>, <ul>, <li>, and <blockquote>. Do NOT wrap the code in \`\`\`html markdown block. Start directly with the content.`;
+
+    try {
+      let contentHtml = "";
+
+      if (aiProvider === "pollinations") {
+        const res = await fetch("https://text.pollinations.ai/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content: `Generate a blog post about "${topic}" in HTML format.`,
+              },
+            ],
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error("Pollinations API failed to respond.");
+        }
+
+        const text = await res.text();
+        contentHtml = text
+          .replace(/^```html\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+      } else if (aiProvider === "gemini") {
+        if (!aiApiKey) {
+          throw new Error(
+            "Gemini API key is required. Please set it in Settings.",
+          );
+        }
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApiKey}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: systemPrompt }] }],
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error?.message || "Failed to generate content with Gemini.",
+          );
+        }
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        contentHtml = text
+          .replace(/^```html\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+      } else {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (aiApiKey) {
+          headers["Authorization"] = `Bearer ${aiApiKey}`;
+        }
+        const res = await fetch(
+          "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              inputs: `<|system|>\n${systemPrompt}</s>\n<|user|>\nWrite the blog post in HTML format.</s>\n<|assistant|>\n`,
+              parameters: {
+                max_new_tokens: 800,
+                temperature: 0.7,
+              },
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          throw new Error("Hugging Face API inference failed.");
+        }
+
+        const data = await res.json();
+        const generatedText = Array.isArray(data)
+          ? data[0]?.generated_text
+          : data?.generated_text;
+
+        if (!generatedText) {
+          throw new Error("Empty response from Hugging Face.");
+        }
+
+        const assistantMarker = "<|assistant|>";
+        const rawHtml = generatedText.includes(assistantMarker)
+          ? generatedText.split(assistantMarker).pop() || ""
+          : generatedText;
+
+        contentHtml = rawHtml
+          .replace(/^```html\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+      }
+
+      if (!contentHtml) {
+        throw new Error("No content generated.");
+      }
+
+      setContent(contentHtml);
+      if (!title.trim()) {
+        setTitle(topic);
+      }
+      toast.success("AI Content generated successfully!", { id: toastId });
+      setIsAiModalOpen(false);
+      setAiPrompt("");
+    } catch (err: any) {
+      console.warn("API call failed, falling back to local simulation:", err);
+      toast.error(
+        `${err.message || "API error"}. Falling back to simulated generation.`,
+        { id: toastId },
+      );
+
+      setTimeout(() => {
+        const generatedHtml = `
+<h2>Introduction</h2>
+<p>In today's fast-paced tech landscape, exploring <strong>${topic}</strong> has become more critical than ever. Whether you're a seasoned professional or just getting started, understanding the fundamental principles of this topic can significantly boost your productivity and career.</p>
+
+<h2>Key Concepts of ${topic}</h2>
+<p>To successfully master this area, there are several core pillars you should focus on:</p>
+<ul>
+  <li><strong>Foundational architecture:</strong> Ensuring you build on scalable models.</li>
+  <li><strong>Efficiency and Speed:</strong> Automating repetitive workflows to save hours of development.</li>
+  <li><strong>Continuous Integration:</strong> Testing early and often to deliver high-quality results.</li>
+</ul>
+
+<blockquote>
+  "The best way to predict the future is to invent it." – Alan Kay
+</blockquote>
+
+<h2>Implementation Guide</h2>
+<p>Getting started doesn't have to be overwhelming. We recommend breaking down your implementation workflow into three distinct phases: initial planning, setting up the core environment, and iterative polishing.</p>
+
+<h2>Conclusion</h2>
+<p>By taking a structured approach to <em>${topic}</em>, teams can innovate faster and build more robust systems. Keep experimenting, stay curious, and continue learning!</p>
+        `.trim();
+
+        setContent(generatedHtml);
+        if (!title.trim()) {
+          setTitle(topic);
+        }
+        setIsAiModalOpen(false);
+        setAiPrompt("");
+      }, 1000);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+    type: "editor" | "textarea" | null;
+    targetElement: HTMLElement | null;
+    hasSelection: boolean;
+    isCode: boolean;
+  } | null>(null);
+
+  const moveSelectedBlock = (direction: "up" | "down") => {
+    if (!editorRef.current) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    let node = sel.anchorNode;
+    if (!node) return;
+
+    let blockNode: HTMLElement | null =
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as HTMLElement)
+        : node.parentElement;
+
+    while (blockNode && blockNode.parentElement !== editorRef.current) {
+      blockNode = blockNode.parentElement;
+    }
+
+    if (!blockNode) return;
+
+    const parent = editorRef.current;
+    if (direction === "up") {
+      const prev = blockNode.previousElementSibling;
+      if (prev) {
+        parent.insertBefore(blockNode, prev);
+      }
+    } else {
+      const next = blockNode.nextElementSibling;
+      if (next) {
+        parent.insertBefore(blockNode, next.nextElementSibling);
+      }
+    }
+
+    setContent(parent.innerHTML);
+  };
+
+  const moveTextareaLine = (
+    textarea: HTMLTextAreaElement,
+    direction: "up" | "down",
+  ) => {
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    const lines = value.split("\n");
+    let charCount = 0;
+    let targetLineIdx = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineLength = lines[i].length + 1; // +1 for \n
+      if (charCount <= start && start <= charCount + lineLength) {
+        targetLineIdx = i;
+        break;
+      }
+      charCount += lineLength;
+    }
+
+    if (targetLineIdx === -1) return;
+
+    if (direction === "up" && targetLineIdx > 0) {
+      const temp = lines[targetLineIdx];
+      lines[targetLineIdx] = lines[targetLineIdx - 1];
+      lines[targetLineIdx - 1] = temp;
+    } else if (direction === "down" && targetLineIdx < lines.length - 1) {
+      const temp = lines[targetLineIdx];
+      lines[targetLineIdx] = lines[targetLineIdx + 1];
+      lines[targetLineIdx + 1] = temp;
+    } else {
+      return;
+    }
+
+    const newValue = lines.join("\n");
+    textarea.value = newValue;
+
+    const event = new Event("input", { bubbles: true });
+    textarea.dispatchEvent(event);
+
+    if (textarea.placeholder.includes("Post title")) {
+      setTitle(newValue);
+    } else if (
+      textarea.placeholder.includes("A short summary") ||
+      textarea.placeholder.includes("SEO description")
+    ) {
+      setExcerpt(newValue);
+    } else if (textarea.className.includes("w-full min-h-[400px]")) {
+      setContent(newValue);
+    }
+  };
+
+  const formatTextareaSelection = (
+    textarea: HTMLTextAreaElement,
+    formatType:
+      | "bold"
+      | "italic"
+      | "underline"
+      | "code"
+      | "h1"
+      | "h2"
+      | "h3"
+      | "p",
+  ) => {
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.substring(start, end);
+
+    let formattedText = selectedText;
+    const isHtml =
+      textarea.className.includes("w-full min-h-[400px]") ||
+      textarea.placeholder.includes("HTML");
+
+    if (isHtml) {
+      switch (formatType) {
+        case "bold":
+          formattedText = `<strong>${selectedText}</strong>`;
+          break;
+        case "italic":
+          formattedText = `<em>${selectedText}</em>`;
+          break;
+        case "underline":
+          formattedText = `<u>${selectedText}</u>`;
+          break;
+        case "code":
+          formattedText = `<code>${selectedText}</code>`;
+          break;
+        case "h1":
+          formattedText = `<h1>${selectedText}</h1>`;
+          break;
+        case "h2":
+          formattedText = `<h2>${selectedText}</h2>`;
+          break;
+        case "h3":
+          formattedText = `<h3>${selectedText}</h3>`;
+          break;
+        case "p":
+          formattedText = selectedText
+            .replace(/^<h[1-3]>/i, "")
+            .replace(/<\/h[1-3]>$/i, "");
+          formattedText = `<p>${formattedText}</p>`;
+          break;
+      }
+    } else {
+      switch (formatType) {
+        case "bold":
+          formattedText = `**${selectedText}**`;
+          break;
+        case "italic":
+          formattedText = `*${selectedText}*`;
+          break;
+        case "underline":
+          formattedText = `_${selectedText}_`;
+          break;
+        case "code":
+          formattedText = `\`${selectedText}\``;
+          break;
+        case "h1":
+          formattedText = `# ${selectedText}`;
+          break;
+        case "h2":
+          formattedText = `## ${selectedText}`;
+          break;
+        case "h3":
+          formattedText = `### ${selectedText}`;
+          break;
+        case "p":
+          formattedText = selectedText.replace(/^#{1,3}\s+/, "");
+          break;
+      }
+    }
+
+    const newValue =
+      value.substring(0, start) + formattedText + value.substring(end);
+    textarea.value = newValue;
+
+    const event = new Event("input", { bubbles: true });
+    textarea.dispatchEvent(event);
+
+    if (textarea.placeholder.includes("Post title")) {
+      setTitle(newValue);
+    } else if (
+      textarea.placeholder.includes("A short summary") ||
+      textarea.placeholder.includes("SEO description")
+    ) {
+      setExcerpt(newValue);
+    } else if (textarea.className.includes("w-full min-h-[400px]")) {
+      setContent(newValue);
+    }
+  };
+
+  const isSelectionInCode = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    let node = sel.anchorNode;
+    while (node && node !== editorRef.current) {
+      if (node.nodeName === "PRE" || node.nodeName === "CODE") {
+        return true;
+      }
+      node = node.parentNode;
+    }
+    return false;
+  };
+
+  const isTextareaSelectionCode = (textarea: HTMLTextAreaElement) => {
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.substring(start, end).trim();
+
+    const isHtml =
+      textarea.className.includes("w-full min-h-[400px]") ||
+      textarea.placeholder.includes("HTML");
+
+    if (isHtml) {
+      return (
+        (selectedText.startsWith("<code>") &&
+          selectedText.endsWith("</code>")) ||
+        (selectedText.startsWith("<pre>") && selectedText.endsWith("</pre>"))
+      );
+    } else {
+      return selectedText.startsWith("`") && selectedText.endsWith("`");
+    }
+  };
+
+  const removeCodeFormat = (
+    targetEl: HTMLElement | null,
+    type: "editor" | "textarea",
+  ) => {
+    if (type === "editor") {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      let node = sel.anchorNode;
+      let preNode: HTMLElement | null = null;
+      while (node && node !== editorRef.current) {
+        if (node.nodeName === "PRE" || node.nodeName === "CODE") {
+          preNode = node as HTMLElement;
+          break;
+        }
+        node = node.parentNode;
+      }
+      if (preNode) {
+        if (preNode.nodeName === "PRE") {
+          executeCommand("formatBlock", "p");
+        } else {
+          const parent = preNode.parentNode;
+          if (parent) {
+            while (preNode.firstChild) {
+              parent.insertBefore(preNode.firstChild, preNode);
+            }
+            parent.removeChild(preNode);
+            if (editorRef.current) setContent(editorRef.current.innerHTML);
+          }
+        }
+      }
+    } else if (type === "textarea" && targetEl) {
+      const textarea = targetEl as HTMLTextAreaElement;
+      const value = textarea.value;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      let selectedText = value.substring(start, end);
+
+      const isHtml =
+        textarea.className.includes("w-full min-h-[400px]") ||
+        textarea.placeholder.includes("HTML");
+
+      if (isHtml) {
+        selectedText = selectedText
+          .replace(/^<code>/, "")
+          .replace(/<\/code>$/, "");
+        selectedText = selectedText
+          .replace(/^<pre>/, "")
+          .replace(/<\/pre>$/, "");
+      } else {
+        selectedText = selectedText.replace(/^`/, "").replace(/`$/, "");
+        selectedText = selectedText.replace(/^```/, "").replace(/```$/, "");
+      }
+
+      const newValue =
+        value.substring(0, start) + selectedText + value.substring(end);
+      textarea.value = newValue;
+
+      const event = new Event("input", { bubbles: true });
+      textarea.dispatchEvent(event);
+
+      if (textarea.placeholder.includes("Post title")) {
+        setTitle(newValue);
+      } else if (
+        textarea.placeholder.includes("A short summary") ||
+        textarea.placeholder.includes("SEO description")
+      ) {
+        setExcerpt(newValue);
+      } else if (textarea.className.includes("w-full min-h-[400px]")) {
+        setContent(newValue);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const isInsideEditor =
+        editorRef.current && editorRef.current.contains(target);
+      const isTextarea =
+        target.tagName === "TEXTAREA" || target.tagName === "INPUT";
+
+      if (!isInsideEditor && !isTextarea) {
+        return;
+      }
+
+      e.preventDefault();
+
+      let hasSel = false;
+      let isCode = false;
+      const type: "editor" | "textarea" = isInsideEditor
+        ? "editor"
+        : "textarea";
+
+      if (isTextarea) {
+        const tx = target as HTMLTextAreaElement | HTMLInputElement;
+        hasSel =
+          tx.selectionStart !== undefined &&
+          tx.selectionStart !== tx.selectionEnd;
+        isCode = hasSel
+          ? isTextareaSelectionCode(tx as HTMLTextAreaElement)
+          : false;
+      } else {
+        const windowSel = window.getSelection();
+        hasSel = windowSel ? windowSel.toString().trim().length > 0 : false;
+        isCode = hasSel ? isSelectionInCode() : false;
+      }
+
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        visible: true,
+        type,
+        targetElement: target,
+        hasSelection: hasSel,
+        isCode,
+      });
+    };
+
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (e.button === 0) {
+        setContextMenu(null);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("click", handleGlobalClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("click", handleGlobalClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   // Link Insertion States
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -147,7 +716,7 @@ export function BlogEditor() {
     width: number;
     height: number;
   } | null>(null);
-  
+
   const [bubbleMenuRect, setBubbleMenuRect] = useState<{
     top: number;
     left: number;
@@ -175,20 +744,20 @@ export function BlogEditor() {
 
   const updateActiveFormats = () => {
     if (!editorRef.current) return;
-    
+
     let block = document.queryCommandValue("formatBlock");
     if (block) {
       block = block.toLowerCase();
     }
-    
+
     const selection = window.getSelection();
     let isCode = false;
     let isQuote = false;
     if (selection && selection.rangeCount > 0) {
       let node = selection.anchorNode;
       while (node && node !== editorRef.current) {
-        if (node.nodeName === 'PRE' || node.nodeName === 'CODE') isCode = true;
-        if (node.nodeName === 'BLOCKQUOTE') isQuote = true;
+        if (node.nodeName === "PRE" || node.nodeName === "CODE") isCode = true;
+        if (node.nodeName === "BLOCKQUOTE") isQuote = true;
         node = node.parentNode;
       }
     }
@@ -331,7 +900,8 @@ export function BlogEditor() {
           const rect = link.getBoundingClientRect();
           const editorBounds = editorRef.current.getBoundingClientRect();
           setLinkRect({
-            top: rect.bottom - editorBounds.top + editorRef.current.scrollTop + 5,
+            top:
+              rect.bottom - editorBounds.top + editorRef.current.scrollTop + 5,
             left: rect.left - editorBounds.left + editorRef.current.scrollLeft,
           });
           setActiveMedia(null);
@@ -931,7 +1501,7 @@ export function BlogEditor() {
         await queryClient.invalidateQueries({ queryKey: ["blogs"] });
         if (!isAutoSave) toast.success("Draft saved successfully");
         if (newId) {
-           navigate(`/blogs/edit/${newId}`, { replace: true });
+          navigate(`/blogs/edit/${newId}`, { replace: true });
         }
       }
     } catch (err) {
@@ -956,7 +1526,11 @@ export function BlogEditor() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === "u") {
         e.preventDefault();
         executeCommand("underline");
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") {
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "x"
+      ) {
         e.preventDefault();
         if (!isHtmlMode) {
           setContent(formatHtmlString(content));
@@ -981,13 +1555,13 @@ export function BlogEditor() {
     isEditing,
     id,
     user,
-    isHtmlMode
+    isHtmlMode,
   ]);
 
   // Debounced Auto-Save
   useEffect(() => {
     if (loading || !content || content === "Start writing..") return;
-    
+
     const timeoutId = setTimeout(() => {
       // Don't auto-save if we haven't typed anything meaningful
       if (title.trim() || content.trim()) {
@@ -1228,10 +1802,17 @@ export function BlogEditor() {
     saveSelection();
     const sel = window.getSelection();
     const selectedText = sel ? sel.toString().trim() : "";
-    if (selectedText && (selectedText.startsWith("http://") || selectedText.startsWith("https://"))) {
+    if (
+      selectedText &&
+      (selectedText.startsWith("http://") ||
+        selectedText.startsWith("https://"))
+    ) {
       setVideoUrl(selectedText);
       // Auto-detect if it's not youtube
-      if (!selectedText.includes("youtube.com") && !selectedText.includes("youtu.be")) {
+      if (
+        !selectedText.includes("youtube.com") &&
+        !selectedText.includes("youtu.be")
+      ) {
         setVideoType("file");
       } else {
         setVideoType("youtube");
@@ -1446,17 +2027,32 @@ export function BlogEditor() {
                     className="w-full h-auto max-h-[400px] object-cover rounded-xl"
                   />
                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={handleCoverImageClick} className="shadow-sm">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCoverImageClick}
+                      className="shadow-sm"
+                    >
                       Change
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => setCoverImage("")} className="shadow-sm">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setCoverImage("")}
+                      className="shadow-sm"
+                    >
                       Remove
                     </Button>
                   </div>
                 </div>
               ) : (
                 <div className="mb-6">
-                  <Button variant="ghost" size="sm" onClick={handleCoverImageClick} className="text-muted-foreground hover:text-foreground -ml-3 gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCoverImageClick}
+                    className="text-muted-foreground hover:text-foreground -ml-3 gap-2"
+                  >
                     <ImageIcon className="h-4 w-4" /> Add cover
                   </Button>
                 </div>
@@ -1490,7 +2086,13 @@ export function BlogEditor() {
                       size="sm"
                       className="h-8 px-2 text-muted-foreground hover:text-foreground"
                     >
-                      {activeFormats.h1 ? "Heading 1" : activeFormats.h2 ? "Heading 2" : activeFormats.h3 ? "Heading 3" : "Normal text"} 
+                      {activeFormats.h1
+                        ? "Heading 1"
+                        : activeFormats.h2
+                          ? "Heading 2"
+                          : activeFormats.h3
+                            ? "Heading 3"
+                            : "Normal text"}
                       <ChevronDown className="ml-2 h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1658,23 +2260,15 @@ export function BlogEditor() {
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
-                
-                <div className="w-px h-4 bg-border mx-1 ml-auto"></div>
-                <Button
-                  variant={isHtmlMode ? "secondary" : "ghost"}
-                  className="text-muted-foreground hover:text-foreground px-2 h-8 text-xs"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    if (!isHtmlMode) {
-                      setContent(formatHtmlString(content));
-                    }
-                    setIsHtmlMode(!isHtmlMode);
-                  }}
-                  title="Toggle HTML (Ctrl+Shift+X)"
-                >
-                  Code
-                </Button>
               </div>
+              <Button
+                variant="default"
+                className="w-full mb-2"
+                onClick={handleAiGenerate}
+              >
+                <Bot className="h-4 w-4" />
+                Start Ai Generated Content
+              </Button>
               {/* Rich Text Area */}
               {!isHtmlMode ? (
                 <div className="relative">
@@ -1752,7 +2346,9 @@ export function BlogEditor() {
                         size="icon"
                         className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground"}`}
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => executeCommand("formatBlock", "blockquote")}
+                        onClick={() =>
+                          executeCommand("formatBlock", "blockquote")
+                        }
                         title="Blockquote"
                       >
                         <Quote className="h-4 w-4" />
@@ -1811,10 +2407,13 @@ export function BlogEditor() {
                         size="icon"
                         className="h-6 w-6 text-destructive hover:bg-destructive/10"
                         onClick={() => {
-                          const text = document.createTextNode(activeLink.textContent || "");
+                          const text = document.createTextNode(
+                            activeLink.textContent || "",
+                          );
                           activeLink.parentNode?.replaceChild(text, activeLink);
                           setActiveLink(null);
-                          if (editorRef.current) setContent(editorRef.current.innerHTML);
+                          if (editorRef.current)
+                            setContent(editorRef.current.innerHTML);
                         }}
                         title="Remove Link"
                       >
@@ -2079,7 +2678,7 @@ export function BlogEditor() {
         </div>
 
         {/* Settings Sidebar */}
-        <div 
+        <div
           className={`
             fixed lg:relative inset-y-0 right-0 z-40 
             w-full sm:w-80 h-full 
@@ -2092,97 +2691,105 @@ export function BlogEditor() {
           {/* Mobile Sidebar Header */}
           <div className="flex lg:hidden items-center justify-between p-4 border-b border-border">
             <h3 className="font-semibold text-foreground">Post Settings</h3>
-            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(false)}
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <div className="p-6 overflow-y-auto flex-1">
             <h3 className="font-semibold mb-6 hidden lg:flex items-center gap-2">
               <LayoutPanelLeft className="h-4 w-4" /> Post Settings
             </h3>
 
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Slug</label>
-              <Input
-                placeholder="my-awesome-post"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Category</label>
-              <MultiDropdown
-                value={category}
-                onChange={setCategory}
-                options={
-                  categories.length > 0 ? categories.map((c) => c.name) : []
-                }
-                placeholder="Select categories..."
-                onAddOption={handleAddCustomCategory}
-                addOptionLabel="Add category"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium mr-5">Status</label>
-              <div className="w-full">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="w-full">
-                    <Button variant="outline" className="w-full !text-start">
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                    <DropdownMenuItem onClick={() => setStatus("draft")}>
-                      Draft
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatus("published")}>
-                      Published
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Excerpt</label>
-              <textarea
-                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="A short summary of your post..."
-                value={excerpt}
-                onChange={(e) => setExcerpt(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Tags</label>
-              <MultiDropdown
-                value={tagsString}
-                onChange={setTagsString}
-                options={availableTags}
-                placeholder="Select or search tags..."
-                onAddOption={handleAddCustomTag}
-                addOptionLabel="Add tag"
-              />
-            </div>
-
-            <div className="pt-4 border-t border-border/50 space-y-4">
-              <h4 className="text-sm font-medium text-muted-foreground">SEO</h4>
+            <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-xs font-medium">Meta Title</label>
-                <Input placeholder="SEO Title" className="h-8 text-sm" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Meta Description</label>
-                <textarea
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="SEO description..."
+                <label className="text-sm font-medium">Slug</label>
+                <Input
+                  placeholder="my-awesome-post"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
                 />
               </div>
-            </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Category</label>
+                <MultiDropdown
+                  value={category}
+                  onChange={setCategory}
+                  options={
+                    categories.length > 0 ? categories.map((c) => c.name) : []
+                  }
+                  placeholder="Select categories..."
+                  onAddOption={handleAddCustomCategory}
+                  addOptionLabel="Add category"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium mr-5">Status</label>
+                <div className="w-full">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="w-full">
+                      <Button variant="outline" className="w-full !text-start">
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                      <DropdownMenuItem onClick={() => setStatus("draft")}>
+                        Draft
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setStatus("published")}>
+                        Published
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Excerpt</label>
+                <textarea
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="A short summary of your post..."
+                  value={excerpt}
+                  onChange={(e) => setExcerpt(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tags</label>
+                <MultiDropdown
+                  value={tagsString}
+                  onChange={setTagsString}
+                  options={availableTags}
+                  placeholder="Select or search tags..."
+                  onAddOption={handleAddCustomTag}
+                  addOptionLabel="Add tag"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-border/50 space-y-4">
+                <h4 className="text-sm font-medium text-muted-foreground">
+                  SEO
+                </h4>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium">Meta Title</label>
+                  <Input placeholder="SEO Title" className="h-8 text-sm" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium">
+                    Meta Description
+                  </label>
+                  <textarea
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="SEO description..."
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2264,36 +2871,6 @@ export function BlogEditor() {
               placeholder="post-slug"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Category</label>
-              <Input
-                placeholder="Category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Status</label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-              >
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Excerpt</label>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground"
-              placeholder="Short summary..."
-              value={excerpt}
-              onChange={(e) => setExcerpt(e.target.value)}
             />
           </div>
         </div>
@@ -2462,6 +3039,120 @@ export function BlogEditor() {
           )}
         </div>
       </Modal>
+
+      {/* AI Content Generation Modal */}
+      <Modal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        title="AI Content Generator"
+        footer={
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsAiModalOpen(false)}
+              disabled={isGeneratingAi}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitAiGenerate}
+              disabled={isGeneratingAi || (!title.trim() && !aiPrompt.trim())}
+              className="gap-2"
+            >
+              {isGeneratingAi && <Loader2 className="h-4 w-4 animate-spin" />}
+              Generate
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2 text-foreground">
+          {/* Settings Section */}
+          <div className="p-3 bg-muted/40 border rounded-lg space-y-3">
+            <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <span>API Settings</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                type="button"
+                variant={
+                  aiProvider === "pollinations" ? "secondary" : "outline"
+                }
+                className="h-8 text-[10px] justify-center px-1"
+                onClick={() => {
+                  setAiProvider("pollinations");
+                  localStorage.setItem("ai_provider", "pollinations");
+                }}
+              >
+                Free AI (No Key)
+              </Button>
+              <Button
+                type="button"
+                variant={aiProvider === "huggingface" ? "secondary" : "outline"}
+                className="h-8 text-[10px] justify-center px-1"
+                onClick={() => {
+                  setAiProvider("huggingface");
+                  localStorage.setItem("ai_provider", "huggingface");
+                }}
+              >
+                HuggingFace
+              </Button>
+              <Button
+                type="button"
+                variant={aiProvider === "gemini" ? "secondary" : "outline"}
+                className="h-8 text-[10px] justify-center px-1"
+                onClick={() => {
+                  setAiProvider("gemini");
+                  localStorage.setItem("ai_provider", "gemini");
+                }}
+              >
+                Gemini API
+              </Button>
+            </div>
+
+            {aiProvider !== "pollinations" && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {aiProvider === "gemini"
+                    ? "Gemini API Key (Required)"
+                    : "HuggingFace Token (Optional)"}
+                </label>
+                <Input
+                  type="password"
+                  placeholder={aiProvider === "gemini" ? "AIzaSy..." : "hf_..."}
+                  value={aiApiKey}
+                  onChange={(e) => {
+                    setAiApiKey(e.target.value);
+                    localStorage.setItem("ai_api_key", e.target.value);
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Blog Title / Topic</label>
+            <Input
+              placeholder="e.g. Master TypeScript Generics"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">
+              Add specific instructions or prompt
+            </label>
+            <textarea
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground"
+              placeholder="e.g. Write a tutorial style post with introduction, key concepts, code snippets, and a conclusion..."
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
+
       <style
         dangerouslySetInnerHTML={{
           __html: `
