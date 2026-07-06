@@ -124,6 +124,7 @@ export function BlogEditor() {
   );
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const [availableTags, setAvailableTags] = useState<string[]>([]);
 
@@ -146,6 +147,84 @@ export function BlogEditor() {
     width: number;
     height: number;
   } | null>(null);
+  
+  const [bubbleMenuRect, setBubbleMenuRect] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const [activeLink, setActiveLink] = useState<HTMLAnchorElement | null>(null);
+  const [linkRect, setLinkRect] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const [activeFormats, setActiveFormats] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    code: false,
+    ul: false,
+    ol: false,
+    quote: false,
+    h1: false,
+    h2: false,
+    h3: false,
+    p: true,
+  });
+
+  const updateActiveFormats = () => {
+    if (!editorRef.current) return;
+    
+    let block = document.queryCommandValue("formatBlock");
+    if (block) {
+      block = block.toLowerCase();
+    }
+    
+    const selection = window.getSelection();
+    let isCode = false;
+    let isQuote = false;
+    if (selection && selection.rangeCount > 0) {
+      let node = selection.anchorNode;
+      while (node && node !== editorRef.current) {
+        if (node.nodeName === 'PRE' || node.nodeName === 'CODE') isCode = true;
+        if (node.nodeName === 'BLOCKQUOTE') isQuote = true;
+        node = node.parentNode;
+      }
+    }
+
+    setActiveFormats({
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+      ul: document.queryCommandState("insertUnorderedList"),
+      ol: document.queryCommandState("insertOrderedList"),
+      code: isCode,
+      quote: isQuote || block === "blockquote",
+      h1: block === "h1",
+      h2: block === "h2",
+      h3: block === "h3",
+      p: block === "p" || block === "div" || !block,
+    });
+  };
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", updateActiveFormats);
+    const editorEl = editorRef.current;
+    if (editorEl) {
+      editorEl.addEventListener("keyup", updateActiveFormats);
+      editorEl.addEventListener("mouseup", updateActiveFormats);
+      editorEl.addEventListener("click", updateActiveFormats);
+    }
+    return () => {
+      document.removeEventListener("selectionchange", updateActiveFormats);
+      if (editorEl) {
+        editorEl.removeEventListener("keyup", updateActiveFormats);
+        editorEl.removeEventListener("mouseup", updateActiveFormats);
+        editorEl.removeEventListener("click", updateActiveFormats);
+      }
+    };
+  }, []);
 
   const updateActiveMediaRect = () => {
     if (!activeMedia || !editorRef.current) {
@@ -234,6 +313,7 @@ export function BlogEditor() {
         ) {
           setActiveMedia(target);
           setActiveTable(null);
+          setActiveLink(null);
           return;
         }
 
@@ -241,6 +321,21 @@ export function BlogEditor() {
         if (table) {
           setActiveTable(table);
           setActiveMedia(null);
+          setActiveLink(null);
+          return;
+        }
+
+        const link = target.closest("a");
+        if (link) {
+          setActiveLink(link);
+          const rect = link.getBoundingClientRect();
+          const editorBounds = editorRef.current.getBoundingClientRect();
+          setLinkRect({
+            top: rect.bottom - editorBounds.top + editorRef.current.scrollTop + 5,
+            left: rect.left - editorBounds.left + editorRef.current.scrollLeft,
+          });
+          setActiveMedia(null);
+          setActiveTable(null);
           return;
         }
       }
@@ -249,16 +344,20 @@ export function BlogEditor() {
       if (
         clickedElement.closest(".image-control-overlay") ||
         clickedElement.closest(".table-control-overlay") ||
+        clickedElement.closest(".bubble-menu-overlay") ||
+        clickedElement.closest(".link-control-overlay") ||
         clickedElement.tagName === "IMG" ||
         clickedElement.tagName === "VIDEO" ||
         clickedElement.tagName === "IFRAME" ||
-        clickedElement.closest("table")
+        clickedElement.closest("table") ||
+        clickedElement.closest("a")
       ) {
         return;
       }
 
       setActiveMedia(null);
       setActiveTable(null);
+      setActiveLink(null);
     };
 
     document.addEventListener("click", handleGlobalClick);
@@ -266,6 +365,49 @@ export function BlogEditor() {
       document.removeEventListener("click", handleGlobalClick);
     };
   }, []);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !editorRef.current) {
+        setBubbleMenuRect(null);
+        return;
+      }
+
+      // Check if selection is within the editor
+      if (
+        !editorRef.current.contains(selection.anchorNode) ||
+        !editorRef.current.contains(selection.focusNode)
+      ) {
+        setBubbleMenuRect(null);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const editorRect = editorRef.current.getBoundingClientRect();
+
+      // Don't show if we are acting on media or table
+      if (activeMedia || activeTable) {
+        setBubbleMenuRect(null);
+        return;
+      }
+
+      setBubbleMenuRect({
+        top: rect.top - editorRect.top + editorRef.current.scrollTop - 10, // slightly above
+        left:
+          rect.left -
+          editorRect.left +
+          editorRef.current.scrollLeft +
+          rect.width / 2,
+      });
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+    };
+  }, [activeMedia, activeTable]);
 
   const addRow = (direction: "above" | "below") => {
     if (!activeTable) return;
@@ -705,7 +847,7 @@ export function BlogEditor() {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-"),
       excerpt,
-      content: convertHtmlToBlocks(content),
+      content,
       coverImage: finalCoverImage,
       category: categoriesArray,
       status: "draft" as const,
@@ -738,6 +880,124 @@ export function BlogEditor() {
     }
   };
 
+  const handleSaveDraftOnly = async (isAutoSave = false) => {
+    setIsSavingDraft(true);
+    let finalCoverImage = coverImage;
+    if (coverImage.startsWith("data:image")) {
+      finalCoverImage = await handleUploadImage(coverImage);
+      setCoverImage(finalCoverImage);
+    }
+
+    const categoriesArray = category
+      ? category
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
+
+    const tagsArray = tagsString
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const blogData = {
+      title: title.trim() || "Untitled Post",
+      slug:
+        slug ||
+        (title.trim() || "untitled-post")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-"),
+      excerpt,
+      content,
+      coverImage: finalCoverImage,
+      category: categoriesArray,
+      status: "draft" as const,
+      tags: tagsArray,
+      authorId: user?.id,
+      author_name: user?.user_metadata.name || "Admin",
+      readingTime: "5 min",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastEdit: user?.user_metadata.name || "Admin",
+    };
+
+    try {
+      if (isEditing && id) {
+        await db.updateBlog(id, blogData);
+        await queryClient.invalidateQueries({ queryKey: ["blogs"] });
+        if (!isAutoSave) toast.success("Draft saved successfully");
+      } else {
+        const newId = await db.createBlog(blogData);
+        await queryClient.invalidateQueries({ queryKey: ["blogs"] });
+        if (!isAutoSave) toast.success("Draft saved successfully");
+        if (newId) {
+           navigate(`/blogs/edit/${newId}`, { replace: true });
+        }
+      }
+    } catch (err) {
+      console.error("Error saving draft:", err);
+      if (!isAutoSave) toast.error("Failed to save draft");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveDraftOnly();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+        e.preventDefault();
+        executeCommand("bold");
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+        e.preventDefault();
+        executeCommand("italic");
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "u") {
+        e.preventDefault();
+        executeCommand("underline");
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        if (!isHtmlMode) {
+          setContent(formatHtmlString(content));
+        }
+        setIsHtmlMode(!isHtmlMode);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    title,
+    content,
+    coverImage,
+    category,
+    slug,
+    excerpt,
+    tagsString,
+    status,
+    isEditing,
+    id,
+    user,
+    isHtmlMode
+  ]);
+
+  // Debounced Auto-Save
+  useEffect(() => {
+    if (loading || !content || content === "Start writing..") return;
+    
+    const timeoutId = setTimeout(() => {
+      // Don't auto-save if we haven't typed anything meaningful
+      if (title.trim() || content.trim()) {
+        handleSaveDraftOnly(true);
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [content, title, coverImage, category, tagsString, excerpt]);
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -762,7 +1022,7 @@ export function BlogEditor() {
           slug ||
           (title || "untitled-post").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         excerpt,
-        content: convertHtmlToBlocks(content),
+        content,
         coverImage: finalCoverImage,
         category: categoriesArray,
         status: status,
@@ -824,6 +1084,7 @@ export function BlogEditor() {
     if (editorRef.current) {
       setContent(editorRef.current.innerHTML);
     }
+    setTimeout(updateActiveFormats, 10);
   };
 
   const insertHTML = (html: string) => {
@@ -965,8 +1226,20 @@ export function BlogEditor() {
 
   const handleVideoClick = () => {
     saveSelection();
-    setVideoUrl("");
-    setVideoType("youtube");
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString().trim() : "";
+    if (selectedText && (selectedText.startsWith("http://") || selectedText.startsWith("https://"))) {
+      setVideoUrl(selectedText);
+      // Auto-detect if it's not youtube
+      if (!selectedText.includes("youtube.com") && !selectedText.includes("youtu.be")) {
+        setVideoType("file");
+      } else {
+        setVideoType("youtube");
+      }
+    } else {
+      setVideoUrl("");
+      setVideoType("youtube");
+    }
     setIsVideoModalOpen(true);
   };
 
@@ -1074,109 +1347,125 @@ export function BlogEditor() {
   };
 
   return (
-    <div className="flex flex-col lg:h-screen min-h-screen">
-      {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
-        {/* Editor Canvas */}
-        <div className="flex-1 bg-[#8080800d] overflow-y-auto relative">
-          {/* Editor Topbar */}
-          <div className="sticky top-0 z-10 flex py-2 md:py-0 md:h-14 items-center  justify-between border-b border-border/50 bg-background/80 px-4 md:px-6 backdrop-blur-xl">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full"
-                onClick={handleBackWithSave}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Draft</span>
-                <span className="text-muted-foreground mx-1">/</span>
-                <span className="font-medium truncate max-w-[200px]">
-                  {title || "Untitled"}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Button
-                variant={isPreviewMode ? "secondary" : "outline"}
-                size="sm"
-                className="bg-background h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
-                onClick={() => setIsPreviewMode(!isPreviewMode)}
-                title={isPreviewMode ? "Edit" : "Preview"}
-              >
-                {isPreviewMode ? (
-                  <>
-                    <EyeOff className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Edit</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Preview</span>
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={() => setIsPublishDialogOpen(true)}
-                size="sm"
-                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 gap-2"
-                title="Save / Publish"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {isSaving ? "Saving..." : "Save / Publish"}
-                </span>
-              </Button>
-            </div>
+    <div className="flex flex-col lg:h-screen min-h-screen bg-background">
+      {/* Editor Topbar */}
+      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background px-4 md:px-6">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleBackWithSave}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Draft</span>
+            <span className="text-muted-foreground mx-1">/</span>
+            <span className="font-medium truncate max-w-[200px]">
+              {title || "Untitled"}
+            </span>
           </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Button
+            variant={isPreviewMode ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsPreviewMode(!isPreviewMode)}
+            title={isPreviewMode ? "Edit" : "Preview"}
+          >
+            {isPreviewMode ? (
+              <>
+                <EyeOff className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit</span>
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Preview</span>
+              </>
+            )}
+          </Button>
+          <Button
+            variant={isSidebarOpen ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 text-muted-foreground hover:text-foreground lg:hidden"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            title="Settings"
+          >
+            <LayoutPanelLeft className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+          <Button
+            variant={isSidebarOpen ? "secondary" : "ghost"}
+            size="sm"
+            className="hidden lg:flex h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3 text-muted-foreground hover:text-foreground"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            title="Settings"
+          >
+            <LayoutPanelLeft className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+          <div className="w-px h-4 bg-border mx-1"></div>
+          <Button
+            onClick={() => setIsPublishDialogOpen(true)}
+            size="sm"
+            className="h-8 sm:h-9 px-4 gap-2"
+            title="Save / Publish"
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">
+              {isSaving ? "Saving..." : "Publish"}
+            </span>
+          </Button>
+        </div>
+      </div>
 
+      <div className="flex-1 flex flex-col lg:flex-row lg:overflow-hidden relative">
+        {/* Editor Canvas */}
+        <div className="flex-1 overflow-y-auto relative bg-background">
           {isPreviewMode ? (
             <BlogDetailPreview
               blog={{ title, content, coverImage, category }}
               onBackToEditor={() => setIsPreviewMode(false)}
             />
           ) : (
-            <div className="max-w-4xl mx-auto px-4 sm:px-8 md:px-16 py-8 md:py-12">
+            <div className="max-w-[760px] mx-auto px-6 sm:px-8 md:px-12 py-10 md:py-16">
               {/* Cover Image */}
-              <div
-                onClick={handleCoverImageClick}
-                className="aspect-[16/8] w-full rounded-xl border-2 border-dashed border-border/500 bg-muted/30 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center cursor-pointer overflow-hidden group relative mb-8"
-              >
-                {coverImage ? (
-                  <>
-                    <img
-                      src={getBlogImageUrl(coverImage)}
-                      alt="Cover"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Button variant="secondary" size="sm">
-                        Change Cover
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon className="h-8 w-8 mb-4 opacity-50 group-hover:opacity-100 transition-opacity" />
-                    <span className="font-medium">Add Cover Image</span>
-                    <span className="text-xs mt-1 opacity-70">
-                      Recommended size: 1600x840px
-                    </span>
-                  </>
-                )}
-              </div>
+              {coverImage ? (
+                <div className="relative group mb-10">
+                  <img
+                    src={getBlogImageUrl(coverImage)}
+                    alt="Cover"
+                    className="w-full h-auto max-h-[400px] object-cover rounded-xl"
+                  />
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={handleCoverImageClick} className="shadow-sm">
+                      Change
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => setCoverImage("")} className="shadow-sm">
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6">
+                  <Button variant="ghost" size="sm" onClick={handleCoverImageClick} className="text-muted-foreground hover:text-foreground -ml-3 gap-2">
+                    <ImageIcon className="h-4 w-4" /> Add cover
+                  </Button>
+                </div>
+              )}
 
               {/* Title Input */}
               <textarea
-                placeholder="Post title..."
-                className="w-full text-4xl md:text-5xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-8 placeholder:font-bold resize-none overflow-hidden min-h-[60px]"
+                placeholder="Article Title"
+                className="w-full text-4xl md:text-5xl font-black tracking-tight bg-transparent border-none outline-none placeholder:text-muted-foreground/30 text-foreground mb-10 placeholder:font-black resize-none overflow-hidden min-h-[60px]"
                 rows={1}
                 value={title}
                 onChange={(e) => {
@@ -1186,7 +1475,6 @@ export function BlogEditor() {
                 }}
                 ref={(el) => {
                   if (el) {
-                    // Set height on initial render/value change
                     el.style.height = "auto";
                     el.style.height = `${el.scrollHeight}px`;
                   }
@@ -1194,18 +1482,19 @@ export function BlogEditor() {
               />
 
               {/* Sticky Toolbar Mock */}
-              <div className="sticky top-14 sm:top-20 z-20 mb-8 flex flex-wrap items-center gap-1 rounded-lg border border-border/50 bg-background/95 p-1 shadow-sm backdrop-blur">
+              <div className="sticky top-0 sm:top-2 z-20 mb-8 flex flex-wrap items-center gap-1 rounded-md border border-border bg-background p-1">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2 text-muted-foreground"
+                      className="h-8 px-2 text-muted-foreground hover:text-foreground"
                     >
-                      Normal text <ChevronDown className="ml-2 h-3 w-3" />
+                      {activeFormats.h1 ? "Heading 1" : activeFormats.h2 ? "Heading 2" : activeFormats.h3 ? "Heading 3" : "Normal text"} 
+                      <ChevronDown className="ml-2 h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent>
+                  <DropdownMenuContent className="min-w-[150px]">
                     <DropdownMenuItem
                       className="font-sans"
                       onMouseDown={(e) => e.preventDefault()}
@@ -1237,112 +1526,108 @@ export function BlogEditor() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <div className="w-px h-4 bg-border/50 mx-1"></div>
+                <div className="w-px h-4 bg-border mx-1"></div>
 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-foreground"
+                  className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("bold")}
+                  title="Bold (Ctrl+B)"
                 >
                   <Bold className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("italic")}
+                  title="Italic (Ctrl+I)"
                 >
                   <Italic className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("underline")}
+                  title="Underline (Ctrl+U)"
                 >
                   <Underline className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("formatBlock", "pre")}
+                  title="Code Block"
                 >
                   <Code className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleLinkClick}
+                  title="Link"
                 >
                   <LinkIcon className="h-4 w-4" />
                 </Button>
 
-                <div className="w-px h-4 bg-border/50 mx-1"></div>
+                <div className="w-px h-4 bg-border mx-1"></div>
 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.ul ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("insertUnorderedList")}
+                  title="Bulleted List"
                 >
                   <List className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.ol ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("insertOrderedList")}
+                  title="Numbered List"
                 >
                   <ListOrdered className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    insertHTML(
-                      '<input type="checkbox" class="mr-2 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" /> ',
-                    )
-                  }
-                >
-                  <CheckSquare className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("formatBlock", "blockquote")}
+                  title="Quote"
                 >
                   <Quote className="h-4 w-4" />
                 </Button>
 
-                <div className="w-px h-4 bg-border/50 mx-1"></div>
+                <div className="w-px h-4 bg-border mx-1"></div>
 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleImageClick}
+                  title="Image"
                 >
                   <ImageIcon className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleVideoClick}
                   title="Insert Video"
@@ -1352,28 +1637,32 @@ export function BlogEditor() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     insertHTML(
                       '<table class="min-w-full divide-y divide-border border rounded-md my-4"><thead><tr class="bg-muted/50"><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 1</th><th class="px-4 py-2 text-left text-xs font-semibold text-muted-foreground border">Header 2</th></tr></thead><tbody class="divide-y divide-border"><tr><td class="px-4 py-2 text-sm border">Data 1</td><td class="px-4 py-2 text-sm border">Data 2</td></tr></tbody></table>',
                     )
                   }
+                  title="Table"
                 >
                   <Table className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => executeCommand("insertHorizontalRule")}
+                  title="Divider"
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
+                
+                <div className="w-px h-4 bg-border mx-1 ml-auto"></div>
                 <Button
                   variant={isHtmlMode ? "secondary" : "ghost"}
-                  className="text-muted-foreground px-2"
+                  className="text-muted-foreground hover:text-foreground px-2 h-8 text-xs"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     if (!isHtmlMode) {
@@ -1381,29 +1670,9 @@ export function BlogEditor() {
                     }
                     setIsHtmlMode(!isHtmlMode);
                   }}
+                  title="Toggle HTML (Ctrl+Shift+X)"
                 >
                   Code
-                </Button>
-
-                <div className="w-px h-4 bg-border/50 mx-1 ml-auto"></div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("undo")}
-                >
-                  <Undo className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => executeCommand("redo")}
-                >
-                  <Redo className="h-4 w-4" />
                 </Button>
               </div>
               {/* Rich Text Area */}
@@ -1411,13 +1680,148 @@ export function BlogEditor() {
                 <div className="relative">
                   <div
                     ref={editorRef}
-                    className="prose prose-lg dark:prose-invert bg-white p-3 rounded-lg max-w-none min-h-[400px] outline-none relative"
+                    className="prose prose-lg dark:prose-invert min-w-full text-slate-800 dark:text-slate-200 min-h-[400px] outline-none relative"
                     contentEditable
                     suppressContentEditableWarning
                     onInput={(e) => setContent(e.currentTarget.innerHTML)}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
                   />
+                  {bubbleMenuRect && (
+                    <div
+                      className="absolute bg-background border border-border shadow-md rounded-md p-1 flex items-center gap-1 z-50 transform -translate-x-1/2 -translate-y-full bubble-menu-overlay"
+                      style={{
+                        top: bubbleMenuRect.top,
+                        left: bubbleMenuRect.left,
+                      }}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${activeFormats.bold ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("bold")}
+                        title="Bold"
+                      >
+                        <Bold className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${activeFormats.italic ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("italic")}
+                        title="Italic"
+                      >
+                        <Italic className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${activeFormats.underline ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("underline")}
+                        title="Underline"
+                      >
+                        <Underline className="h-4 w-4" />
+                      </Button>
+                      <div className="w-px h-4 bg-border/50 mx-1"></div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 font-bold ${activeFormats.h2 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("formatBlock", "h2")}
+                        title="Heading 2"
+                      >
+                        H2
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 font-bold ${activeFormats.h3 ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("formatBlock", "h3")}
+                        title="Heading 3"
+                      >
+                        H3
+                      </Button>
+                      <div className="w-px h-4 bg-border/50 mx-1"></div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${activeFormats.quote ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("formatBlock", "blockquote")}
+                        title="Blockquote"
+                      >
+                        <Quote className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${activeFormats.code ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => executeCommand("formatBlock", "pre")}
+                        title="Code"
+                      >
+                        <Code className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={handleLinkClick}
+                        title="Insert Link"
+                      >
+                        <LinkIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={handleVideoClick}
+                        title="Insert Video"
+                      >
+                        <Video className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  {activeLink && linkRect && (
+                    <div
+                      className="absolute bg-background border border-border shadow-md rounded-md p-2 flex items-center gap-2 z-50 link-control-overlay"
+                      style={{
+                        top: linkRect.top,
+                        left: linkRect.left,
+                      }}
+                    >
+                      <a
+                        href={activeLink.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-600 hover:underline max-w-[200px] truncate"
+                      >
+                        {activeLink.href}
+                      </a>
+                      <div className="w-px h-4 bg-border/50 mx-1"></div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          const text = document.createTextNode(activeLink.textContent || "");
+                          activeLink.parentNode?.replaceChild(text, activeLink);
+                          setActiveLink(null);
+                          if (editorRef.current) setContent(editorRef.current.innerHTML);
+                        }}
+                        title="Remove Link"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                   {activeMedia && mediaRect && (
                     <div
                       className="absolute pointer-events-none border-2 border-primary image-control-overlay rounded-md"
@@ -1661,11 +2065,12 @@ export function BlogEditor() {
                   )}
                 </div>
               ) : (
-                <div className="prose prose-lg dark:prose-invert bg-white p-3 rounded-lg max-w-none  outline-none relative">
+                <div className="prose prose-lg dark:prose-invert min-w-full min-h-[400px] outline-none relative font-mono text-sm">
                   <textarea
-                    className="w-full min-h-[400px] outline-none resize-none"
+                    className="w-full min-h-[400px] outline-none resize-none bg-muted/20 p-4 rounded-lg"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
+                    spellCheck={false}
                   />
                 </div>
               )}
@@ -1674,10 +2079,28 @@ export function BlogEditor() {
         </div>
 
         {/* Settings Sidebar */}
-        <div className="w-full lg:w-80 h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-border/50 bg-background/30 p-6 overflow-y-visible lg:overflow-y-auto shrink-0">
-          <h3 className="font-medium mb-6 flex items-center gap-2">
-            <LayoutPanelLeft className="h-4 w-4" /> Post Settings
-          </h3>
+        <div 
+          className={`
+            fixed lg:relative inset-y-0 right-0 z-40 
+            w-full sm:w-80 h-full 
+            border-l border-border bg-background shadow-2xl lg:shadow-none
+            transition-transform duration-300 ease-in-out transform
+            ${isSidebarOpen ? "translate-x-0" : "translate-x-full lg:hidden hidden"}
+            flex flex-col
+          `}
+        >
+          {/* Mobile Sidebar Header */}
+          <div className="flex lg:hidden items-center justify-between p-4 border-b border-border">
+            <h3 className="font-semibold text-foreground">Post Settings</h3>
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="p-6 overflow-y-auto flex-1">
+            <h3 className="font-semibold mb-6 hidden lg:flex items-center gap-2">
+              <LayoutPanelLeft className="h-4 w-4" /> Post Settings
+            </h3>
 
           <div className="space-y-6">
             <div className="space-y-2">
@@ -1759,6 +2182,7 @@ export function BlogEditor() {
                   placeholder="SEO description..."
                 />
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -2048,6 +2472,28 @@ export function BlogEditor() {
         .prose-lg :where(p):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
           margin-top: 0px !important;
           margin-bottom: 0px !important;
+        }
+        .prose a {
+          color: #2563eb !important;
+          text-decoration: underline !important;
+        }
+        .prose ul, .prose ol {
+          margin-top: 0.25em !important;
+          margin-bottom: 0.25em !important;
+        }
+        .prose li {
+          margin-top: 0.1em !important;
+          margin-bottom: 0.1em !important;
+          line-height: 1.5 !important;
+        }
+        .prose li p {
+          margin-top: 0px !important;
+          margin-bottom: 0px !important;
+        }
+        .prose hr {
+          margin-top: 1em !important;
+          margin-bottom: 1em !important;
+          border-color: hsl(var(--border));
         }
       `,
         }}
