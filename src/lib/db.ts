@@ -213,12 +213,22 @@ export const db = {
         : (typeof blog.category === 'string' ? blog.category.split(",").map(c => c.trim()).filter(Boolean) : [blog.category].filter(Boolean));
 
       const categoryIds: string[] = [];
-      for (const catName of categoryNames) {
-        const { data: catData } = await supabase
+      for (const catNameOrSlug of categoryNames) {
+        let { data: catData } = await supabase
           .from("categories")
           .select("id")
-          .ilike("name", catName)
+          .eq("slug", catNameOrSlug)
           .maybeSingle();
+
+        if (!catData) {
+          const { data: catDataByName } = await supabase
+            .from("categories")
+            .select("id")
+            .ilike("name", catNameOrSlug)
+            .maybeSingle();
+          catData = catDataByName;
+        }
+
         if (catData) categoryIds.push(catData.id);
       }
 
@@ -307,12 +317,22 @@ export const db = {
           : (typeof blog.category === 'string' ? blog.category.split(",").map(c => c.trim()).filter(Boolean) : [blog.category].filter(Boolean));
 
         categoryIds = [];
-        for (const catName of categoryNames) {
-          const { data: catData } = await supabase
+        for (const catNameOrSlug of categoryNames) {
+          let { data: catData } = await supabase
             .from("categories")
             .select("id")
-            .ilike("name", catName)
+            .eq("slug", catNameOrSlug)
             .maybeSingle();
+
+          if (!catData) {
+            const { data: catDataByName } = await supabase
+              .from("categories")
+              .select("id")
+              .ilike("name", catNameOrSlug)
+              .maybeSingle();
+            catData = catDataByName;
+          }
+
           if (catData) categoryIds.push(catData.id);
         }
       }

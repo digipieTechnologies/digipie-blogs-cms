@@ -4,7 +4,7 @@ import { X, Check } from "lucide-react";
 interface MultiDropdownProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: (string | { name: string; slug: string })[];
   placeholder?: string;
   onAddOption?: (option: string) => void | Promise<void>;
   addOptionLabel?: string;
@@ -22,7 +22,15 @@ export function MultiDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectedItems = value
+  // Normalize options to always be { name, slug } objects
+  const normalizedOptions = options.map((opt) => {
+    if (typeof opt === "string") {
+      return { name: opt, slug: opt };
+    }
+    return opt;
+  });
+
+  const selectedSlugs = value
     ? value
         .split(",")
         .map((item) => item.trim())
@@ -42,12 +50,12 @@ export function MultiDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleToggle = (item: string) => {
+  const handleToggle = (slug: string) => {
     let newItems;
-    if (selectedItems.includes(item)) {
-      newItems = selectedItems.filter((i) => i !== item);
+    if (selectedSlugs.includes(slug)) {
+      newItems = selectedSlugs.filter((s) => s !== slug);
     } else {
-      newItems = [...selectedItems, item];
+      newItems = [...selectedSlugs, slug];
     }
     onChange(newItems.join(", "));
   };
@@ -56,8 +64,10 @@ export function MultiDropdown({
     const trimmed = search.trim();
     if (!trimmed) return;
 
-    if (!selectedItems.includes(trimmed)) {
-      const newItems = [...selectedItems, trimmed];
+    const generatedSlug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    if (!selectedSlugs.includes(generatedSlug)) {
+      const newItems = [...selectedSlugs, generatedSlug];
       onChange(newItems.join(", "));
       if (onAddOption) {
         await onAddOption(trimmed);
@@ -73,27 +83,40 @@ export function MultiDropdown({
         onClick={() => setIsOpen(true)}
         className="flex flex-wrap gap-1.5 p-2 rounded-md border border-input bg-background min-h-[40px] focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 cursor-pointer transition-all"
       >
-        {selectedItems.map((item) => (
-          <span
-            key={item}
-            className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded font-medium"
-          >
-            {item}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleToggle(item);
-              }}
-              className="text-muted-foreground hover:text-foreground rounded-full"
+        {selectedSlugs.map((slug) => {
+          const option = normalizedOptions.find((o) => o.slug === slug);
+          const hasDuplicateName = option
+            ? normalizedOptions.filter(
+                (o) => o.name.toLowerCase() === option.name.toLowerCase(),
+              ).length > 1
+            : false;
+          const displayName = option
+            ? hasDuplicateName
+              ? `${option.name} (${option.slug})`
+              : option.name
+            : slug;
+          return (
+            <span
+              key={slug}
+              className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded font-medium"
             >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+              {displayName}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggle(slug);
+                }}
+                className="text-muted-foreground hover:text-foreground rounded-full"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          );
+        })}
         <input
           type="text"
-          placeholder={selectedItems.length === 0 ? placeholder : ""}
+          placeholder={selectedSlugs.length === 0 ? placeholder : ""}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -114,27 +137,47 @@ export function MultiDropdown({
       {isOpen && (
         <div className="absolute top-full left-0 z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-md border bg-popover p-1 shadow-xl text-popover-foreground">
           <div className="py-1">
-            {options.map((option) => {
-              const isSelected = selectedItems.includes(option);
+            {normalizedOptions.map((option) => {
+              const isSelected = selectedSlugs.includes(option.slug);
+              const hasDuplicateName =
+                normalizedOptions.filter(
+                  (o) => o.name.toLowerCase() === option.name.toLowerCase(),
+                ).length > 1;
 
-              if (search && !option.toLowerCase().includes(search.toLowerCase())) {
+              if (
+                search &&
+                !option.name.toLowerCase().includes(search.toLowerCase())
+              ) {
                 return null;
               }
 
               return (
                 <div
-                  key={option}
-                  onClick={() => handleToggle(option)}
+                  key={option.slug}
+                  onClick={() => handleToggle(option.slug)}
                   className="flex items-center justify-between px-2.5 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
                 >
-                  <span>{option}</span>
-                  {isSelected && <Check className="h-4 w-4 text-primary" />}
+                  <div className="flex flex-col text-left">
+                    <span className="font-medium text-foreground">
+                      {option.name}
+                    </span>
+                    {hasDuplicateName && (
+                      <span className="text-[10px] text-muted-foreground/80 font-mono">
+                        {option.slug}
+                      </span>
+                    )}
+                  </div>
+                  {isSelected && (
+                    <Check className="h-4 w-4 text-primary shrink-0 ml-2" />
+                  )}
                 </div>
               );
             })}
 
             {search.trim() &&
-              !options.some((o) => o.toLowerCase() === search.trim().toLowerCase()) && (
+              !normalizedOptions.some(
+                (o) => o.name.toLowerCase() === search.trim().toLowerCase(),
+              ) && (
                 <div
                   onClick={handleAddOption}
                   className="px-2.5 py-1.5 text-sm text-primary hover:bg-accent rounded-sm cursor-pointer transition-colors font-medium"

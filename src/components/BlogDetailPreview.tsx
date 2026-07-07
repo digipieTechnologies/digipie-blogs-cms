@@ -62,7 +62,7 @@ function TableOfContents({
   if (!toc || toc.length === 0) return null;
 
   return (
-    <div className="bg-white min-w-100 rounded-2xl border border-border-brand p-5 shadow-sm">
+    <div className="bg-white dark:bg-slate-900 min-w-100 rounded-2xl border border-border-brand dark:border-slate-800 p-5 shadow-sm">
       <p className="text-[11px] font-bold tracking-[0.12em] uppercase text-orange mb-4">
         Table of Contents
       </p>
@@ -88,8 +88,8 @@ function TableOfContents({
             }}
             className={`text-[13px] leading-snug px-3 py-2 rounded-lg transition-colors duration-150 ${
               activeId === item.id
-                ? "bg-navy-dark text-white font-semibold"
-                : "text-slate-600 hover:bg-surface-brand hover:text-navy-dark"
+                ? "bg-navy-dark dark:bg-slate-800 text-white font-semibold"
+                : "text-slate-600 dark:text-slate-400 hover:bg-surface-brand dark:hover:bg-slate-800 hover:text-navy-dark dark:hover:text-slate-200"
             }`}
           >
             {item.label}
@@ -187,7 +187,7 @@ export function BlogDetailPreview({
   }, [blog.createdAt]);
 
   return (
-    <div className="min-h-screen bg-surface-brand">
+    <div className="min-h-screen bg-surface-brand dark:bg-slate-950 transition-colors duration-200">
       <style>{`
         .bg-surface-brand { background-color: #F8FAFC; }
         .bg-navy-dark { background-color: #0A1128; }
@@ -208,6 +208,15 @@ export function BlogDetailPreview({
         .prose li { color: #475569; line-height: 1.85; margin-bottom: 0.5rem; }
         .prose blockquote { border-left-width: 4px; border-left-color: #FF5A1F; padding-left: 1rem; font-style: italic; color: #0A1128; margin: 1.5rem 0; }
         .prose a { color: #2563eb !important; text-decoration: underline !important; }
+
+        /* Dark mode overrides */
+        .dark .prose h1 { color: #F8FAFC !important; }
+        .dark .prose h2 { color: #F8FAFC !important; }
+        .dark .prose h3 { color: #E2E8F0 !important; }
+        .dark .prose p { color: #94A3B8 !important; }
+        .dark .prose li { color: #94A3B8 !important; }
+        .dark .prose strong { color: #F8FAFC !important; }
+        .dark .prose blockquote { color: #F8FAFC !important; }
       `}</style>
 
       {/* Hero */}
@@ -247,7 +256,7 @@ export function BlogDetailPreview({
         <article className="min-w-0 flex-1">
           {/* Mobile TOC */}
           {toc && toc.length > 0 && (
-            <div className="lg:hidden mb-8 bg-white rounded-2xl border border-border-brand p-5">
+            <div className="lg:hidden mb-8 bg-white dark:bg-slate-900 rounded-2xl border border-border-brand dark:border-slate-800 p-5">
               <p className="text-[11px] font-bold tracking-[0.12em] uppercase text-orange mb-3">
                 Table of Contents
               </p>
@@ -272,7 +281,7 @@ export function BlogDetailPreview({
                         });
                       }
                     }}
-                    className="text-[13px] text-slate-600 hover:text-navy-dark px-2 py-1.5 rounded-lg hover:bg-surface-brand transition-colors"
+                    className="text-[13px] text-slate-600 dark:text-slate-400 hover:text-navy-dark dark:hover:text-slate-200 px-2 py-1.5 rounded-lg hover:bg-surface-brand dark:hover:bg-slate-800 transition-colors"
                   >
                     {item.label}
                   </a>
@@ -290,10 +299,10 @@ export function BlogDetailPreview({
           </div>
 
           {/* Categories + Tags */}
-          <div className="mt-12 pt-8 border-t border-border-brand">
+          <div className="mt-12 pt-8 border-t border-border-brand dark:border-slate-800">
             {/* Categories */}
             <div className="flex flex-wrap gap-2 mb-3">
-              <span className="text-[12px] font-medium px-3 py-1 rounded-full bg-navy-ghost text-navy-mid border border-border-brand">
+              <span className="text-[12px] font-medium px-3 py-1 rounded-full bg-navy-ghost dark:bg-slate-800 text-navy-mid dark:text-slate-300 border border-border-brand dark:border-slate-800">
                 #{blog.category}
               </span>
             </div>

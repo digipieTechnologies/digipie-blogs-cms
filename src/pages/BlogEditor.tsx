@@ -1270,9 +1270,10 @@ export function BlogEditor() {
           .map((c) => c.trim())
           .filter(Boolean)
       : [];
-    if (!currentCats.includes(trimmed)) {
+    const generatedSlug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    if (!currentCats.includes(generatedSlug)) {
       // Optimistically add to selection
-      const newCats = [...currentCats, trimmed];
+      const newCats = [...currentCats, generatedSlug];
       setCategory(newCats.join(", "));
 
       try {
@@ -1377,16 +1378,20 @@ export function BlogEditor() {
       setTitle(fetchedBlog.title);
       setContent(convertContentToHtml(fetchedBlog.content));
       setCoverImage(fetchedBlog.coverImage || "");
-      const categoryVal = Array.isArray(fetchedBlog.category)
-        ? fetchedBlog.category.join(", ")
-        : fetchedBlog.category || "";
-      setCategory(categoryVal);
+      const fetchedNames = Array.isArray(fetchedBlog.category)
+        ? fetchedBlog.category
+        : (fetchedBlog.category ? [fetchedBlog.category] : []);
+      const fetchedSlugs = fetchedNames.map((name) => {
+        const cat = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+        return cat ? cat.slug : name;
+      });
+      setCategory(fetchedSlugs.join(", "));
       setSlug(fetchedBlog.slug);
       setExcerpt(fetchedBlog.excerpt);
       setTagsString(fetchedBlog.tags?.join(", ") || "");
       setStatus(fetchedBlog.status);
     }
-  }, [fetchedBlog, isEditing]);
+  }, [fetchedBlog, isEditing, categories]);
 
   useEffect(() => {
     if (editorRef.current && !isPreviewMode && !isHtmlMode && !loading) {
@@ -1444,8 +1449,12 @@ export function BlogEditor() {
       category: categoriesArray,
       status: status,
       tags: tagsArray,
-      authorId: user?.id,
-      author_name: user?.user_metadata.name || "Admin",
+      authorId: isEditing
+        ? fetchedBlog?.authorId || fetchedBlog?.authorId
+        : user?.id,
+      author_name: isEditing
+        ? fetchedBlog?.author_name
+        : user?.user_metadata.name || "Admin",
       readingTime: "5 min",
       createdAt:
         isEditing && fetchedBlog?.createdAt
@@ -1508,8 +1517,12 @@ export function BlogEditor() {
       category: categoriesArray,
       status: status,
       tags: tagsArray,
-      authorId: user?.id,
-      author_name: user?.user_metadata.name || "Admin",
+      authorId: isEditing
+        ? fetchedBlog?.authorId || fetchedBlog?.authorId
+        : user?.id,
+      author_name: isEditing
+        ? fetchedBlog?.author_name
+        : user?.user_metadata.name || "Admin",
       readingTime: "5 min",
       createdAt:
         isEditing && fetchedBlog?.createdAt
@@ -1638,8 +1651,12 @@ export function BlogEditor() {
         category: categoriesArray,
         status: status,
         tags: tagsArray,
-        authorId: user?.id,
-        author_name: user?.user_metadata.name || "Admin",
+        authorId: isEditing
+          ? fetchedBlog?.authorId || fetchedBlog?.authorId
+          : user?.id,
+        author_name: isEditing
+          ? fetchedBlog?.author_name
+          : user?.user_metadata.name || "Admin",
         readingTime: "5 min",
         createdAt:
           isEditing && fetchedBlog?.createdAt
@@ -2788,7 +2805,9 @@ export function BlogEditor() {
                   value={category}
                   onChange={setCategory}
                   options={
-                    categories.length > 0 ? categories.map((c) => c.name) : []
+                    categories.length > 0
+                      ? categories.map((c) => ({ name: c.name, slug: c.slug }))
+                      : []
                   }
                   placeholder="Select categories..."
                   onAddOption={handleAddCustomCategory}
