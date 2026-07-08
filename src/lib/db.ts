@@ -131,6 +131,8 @@ export const db = {
           readingTime: b.reading_time ? `${b.reading_time} min` : b.readingTime || "5 min",
           tags: tags.length > 0 ? tags : (b.tags || []),
           lastEdit: b.last_edit,
+          metaTitle: b.meta_title || "",
+          metaDescription: b.meta_description || "",
         };
       });
     } catch (err) {
@@ -188,6 +190,8 @@ export const db = {
         readingTime: data.reading_time ? `${data.reading_time} min` : data.readingTime || "5 min",
         tags: tags.length > 0 ? tags : (data.tags || []),
         lastEdit: data.last_edit,
+        metaTitle: data.meta_title || "",
+        metaDescription: data.meta_description || "",
       };
     } catch (err) {
       console.warn(`Supabase fetch for blog ${id} failed, falling back:`, err);
@@ -272,6 +276,8 @@ export const db = {
         reading_time: typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : (blog.readingTime || 5),
         published_at: blog.status === "published" ? new Date().toISOString() : null,
         last_edit: blog.lastEdit || null,
+        meta_title: blog.metaTitle || "",
+        meta_description: blog.metaDescription || "",
       };
 
       const { data, error } = await supabase
@@ -385,6 +391,8 @@ export const db = {
       if (blog.coverImage !== undefined) updateData.cover_image = blog.coverImage;
       if (blog.readingTime !== undefined) updateData.reading_time = typeof blog.readingTime === 'string' ? (parseInt(blog.readingTime) || 5) : blog.readingTime;
       if (blog.lastEdit !== undefined) updateData.last_edit = blog.lastEdit;
+      if (blog.metaTitle !== undefined) updateData.meta_title = blog.metaTitle;
+      if (blog.metaDescription !== undefined) updateData.meta_description = blog.metaDescription;
 
       const { error } = await supabase
         .from("blogs")

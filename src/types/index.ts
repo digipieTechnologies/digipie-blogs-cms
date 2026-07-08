@@ -19,6 +19,8 @@ export interface Blog {
   readingTime: string;
   tags: string[];
   lastEdit?: string;
+  metaTitle?: string;
+  metaDescription?: string;
 }
 
 export interface Category {

@@ -123,6 +123,8 @@ export function BlogEditor() {
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [tagsString, setTagsString] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
 
   const [status, setStatus] = useState<"draft" | "published" | "archived">(
     "draft",
@@ -1390,6 +1392,8 @@ export function BlogEditor() {
       setExcerpt(fetchedBlog.excerpt);
       setTagsString(fetchedBlog.tags?.join(", ") || "");
       setStatus(fetchedBlog.status);
+      setMetaTitle(fetchedBlog.metaTitle || "");
+      setMetaDescription(fetchedBlog.metaDescription || "");
     }
   }, [fetchedBlog, isEditing, categories]);
 
@@ -1664,6 +1668,8 @@ export function BlogEditor() {
             : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         lastEdit: user?.user_metadata.name || "Admin",
+        metaTitle: metaTitle,
+        metaDescription: metaDescription,
       };
 
       if (isEditing && id) {
@@ -2876,7 +2882,12 @@ export function BlogEditor() {
                 </h4>
                 <div className="space-y-2">
                   <label className="text-xs font-medium">Meta Title</label>
-                  <Input placeholder="SEO Title" className="h-8 text-sm" />
+                  <Input
+                    placeholder="SEO Title"
+                    className="h-8 text-sm"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-medium">
@@ -2885,6 +2896,8 @@ export function BlogEditor() {
                   <textarea
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="SEO description..."
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
                   />
                 </div>
               </div>
