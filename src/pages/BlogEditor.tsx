@@ -25,6 +25,7 @@ import {
   Save,
   Check,
   X,
+  XCircle,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -125,8 +126,9 @@ export function BlogEditor() {
   const [tagsString, setTagsString] = useState("");
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
+  const [errors, setErrors] = useState({ title: "", slug: "" });
 
-  const [status, setStatus] = useState<"draft" | "published" | "archived">(
+  const [status, setStatus] = useState<"draft" | "published">(
     "draft",
   );
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
@@ -1424,6 +1426,16 @@ export function BlogEditor() {
   };
 
   const saveAndExit = async () => {
+    let hasError = false;
+    const newErrors = { title: "", slug: "" };
+    if (!title.trim()) { newErrors.title = "Post title and slug are required."; hasError = true; }
+    if (!slug.trim()) { newErrors.slug = "Post title and slug are required."; hasError = true; }
+    if (hasError) {
+      setErrors(newErrors);
+      setShowExitDialog(false);
+      return;
+    }
+    setErrors({ title: "", slug: "" });
     setIsSavingDraft(true);
     const finalCoverImage = await handleUploadImage(coverImage);
     setCoverImage(finalCoverImage);
@@ -1441,12 +1453,8 @@ export function BlogEditor() {
       .filter(Boolean);
 
     const blogData = {
-      title: title.trim() || "Untitled Post",
-      slug:
-        slug ||
-        (title.trim() || "untitled-post")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-"),
+      title: title.trim(),
+      slug: slug.trim(),
       excerpt,
       content,
       coverImage: finalCoverImage,
@@ -1489,6 +1497,15 @@ export function BlogEditor() {
   };
 
   const handleSaveDraftOnly = async (isAutoSave = false) => {
+    let hasError = false;
+    const newErrors = { title: "", slug: "" };
+    if (!title.trim()) { newErrors.title = "Post title and slug are required."; hasError = true; }
+    if (!slug.trim()) { newErrors.slug = "Post title and slug are required."; hasError = true; }
+    if (hasError) {
+      if (!isAutoSave) setErrors(newErrors);
+      return;
+    }
+    setErrors({ title: "", slug: "" });
     setIsSavingDraft(true);
     let finalCoverImage = coverImage;
     if (coverImage.startsWith("data:image")) {
@@ -1509,12 +1526,8 @@ export function BlogEditor() {
       .filter(Boolean);
 
     const blogData = {
-      title: title.trim() || "Untitled Post",
-      slug:
-        slug ||
-        (title.trim() || "untitled-post")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-"),
+      title: title.trim(),
+      slug: slug.trim(),
       excerpt,
       content,
       coverImage: finalCoverImage,
@@ -1627,6 +1640,15 @@ export function BlogEditor() {
   ]);
 
   const handleSave = async () => {
+    let hasError = false;
+    const newErrors = { title: "", slug: "" };
+    if (!title.trim()) { newErrors.title = "Post title and slug are required."; hasError = true; }
+    if (!slug.trim()) { newErrors.slug = "Post title and slug are required."; hasError = true; }
+    if (hasError) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({ title: "", slug: "" });
     setIsSaving(true);
     try {
       const finalCoverImage = await handleUploadImage(coverImage);
@@ -1645,10 +1667,8 @@ export function BlogEditor() {
         .filter(Boolean);
 
       const blogData = {
-        title: title || "Untitled Post",
-        slug:
-          slug ||
-          (title || "untitled-post").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        title: title.trim(),
+        slug: slug.trim(),
         excerpt,
         content,
         coverImage: finalCoverImage,
@@ -2134,6 +2154,7 @@ export function BlogEditor() {
                   value={title}
                   onChange={(e) => {
                     setTitle(e.target.value);
+                    if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
                     e.target.style.height = "auto";
                     e.target.style.height = `${e.target.scrollHeight}px`;
                   }}
@@ -2842,9 +2863,6 @@ export function BlogEditor() {
                       <DropdownMenuItem onClick={() => setStatus("published")}>
                         Published
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setStatus("archived")}>
-                        Archived
-                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -2973,44 +2991,34 @@ export function BlogEditor() {
             <Input
               placeholder="Post title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
+              }}
+              className={errors.title ? "border-destructive focus-visible:ring-destructive" : ""}
             />
+            {errors.title && (
+              <div className="text-destructive text-xs font-medium mt-1 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5" /> {errors.title}
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Slug</label>
             <Input
               placeholder="post-slug"
               value={slug}
-              onChange={(e) => setSlug(e.target.value)}
+              onChange={(e) => {
+                setSlug(e.target.value);
+                if (errors.slug) setErrors((prev) => ({ ...prev, slug: "" }));
+              }}
+              className={errors.slug ? "border-destructive focus-visible:ring-destructive" : ""}
             />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Status</label>
-            <div className="w-full">
-              <DropdownMenu>
-                <DropdownMenuTrigger className="w-full" asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between"
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                    <ChevronDown className="h-4 w-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                  <DropdownMenuItem onClick={() => setStatus("draft")}>
-                    Draft
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatus("published")}>
-                    Published
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatus("archived")}>
-                    Archived
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            {errors.slug && (
+              <div className="text-destructive text-xs font-medium mt-1 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5" /> {errors.slug}
+              </div>
+            )}
           </div>
         </div>
       </Modal>

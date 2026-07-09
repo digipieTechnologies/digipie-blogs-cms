@@ -140,77 +140,126 @@ export function Inquiries() {
               No submissions found.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-muted/20 border-b border-border/50">
-                  <tr>
-                    <th className="px-6 py-3 font-semibold">Date</th>
-                    <th className="px-6 py-3 font-semibold">Name</th>
-                    <th className="px-6 py-3 font-semibold">Contact Info</th>
-                    <th className="px-6 py-3 font-semibold w-1/3">Message</th>
-                    <th className="px-6 py-3 font-semibold">Status</th>
-                    <th className="px-6 py-3 font-semibold text-right">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {filteredInquiries.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="group hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
-                        {new Date(item.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 font-medium whitespace-nowrap text-foreground">
-                        {item.name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-foreground space-y-0.5">
-                        <div className="font-medium">{item.email}</div>
-                        {item.phone && (
-                          <div className="text-xs text-muted-foreground">
-                            {item.phone}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                        {item.message}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          className={`text-xs font-semibold rounded-full px-2.5 py-1 border outline-none bg-background cursor-pointer ${
-                            (item.status || "pending") === "pending"
-                              ? "text-amber-700 border-amber-200 bg-amber-50"
-                              : (item.status || "pending") === "replied"
-                                ? "text-emerald-700 border-emerald-200 bg-emerald-50"
-                                : "text-blue-700 border-blue-200 bg-blue-50"
-                          }`}
-                          value={item.status || "pending"}
-                          onChange={(e) =>
-                            updateStatus(item.id, e.target.value)
-                          }
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="replied">Replied</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteConfirmId(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
+            <>
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-muted/20 border-b border-border/50">
+                    <tr>
+                      <th className="px-6 py-3 font-semibold">Date</th>
+                      <th className="px-6 py-3 font-semibold">Name</th>
+                      <th className="px-6 py-3 font-semibold">Contact Info</th>
+                      <th className="px-6 py-3 font-semibold w-1/3 min-w-[300px]">Message</th>
+                      <th className="px-6 py-3 font-semibold">Status</th>
+                      <th className="px-6 py-3 font-semibold text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {filteredInquiries.map((item) => (
+                      <tr key={item.id} className="group hover:bg-muted/30 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
+                          {new Date(item.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 font-medium whitespace-nowrap text-foreground">
+                          {item.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-foreground space-y-0.5">
+                          <div className="font-medium">{item.email}</div>
+                          {item.phone && <div className="text-xs text-muted-foreground">{item.phone}</div>}
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                          {item.message}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <select
+                            className={`text-xs font-semibold rounded-full px-2.5 py-1 border outline-none bg-background cursor-pointer ${
+                              (item.status || "pending") === "pending"
+                                ? "text-amber-700 border-amber-200 bg-amber-50"
+                                : (item.status || "pending") === "replied"
+                                  ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+                                  : "text-blue-700 border-blue-200 bg-blue-50"
+                            }`}
+                            value={item.status || "pending"}
+                            onChange={(e) => updateStatus(item.id, e.target.value)}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="replied">Replied</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4 text-right whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteConfirmId(item.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card Layout */}
+              <div className="md:hidden flex flex-col divide-y divide-border/50">
+                {filteredInquiries.map((item) => (
+                  <div key={item.id} className="p-4 space-y-4 hover:bg-muted/10 transition-colors">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <h4 className="font-semibold text-foreground">{item.name}</h4>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(item.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => setDeleteConfirmId(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-1.5 bg-muted/20 p-3 rounded-md border border-border/50">
+                      <div className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" /> {item.email}
+                      </div>
+                      {item.phone && (
+                        <div className="text-xs text-muted-foreground pl-5.5">
+                          {item.phone}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {item.message}
+                    </div>
+
+                    <div className="pt-3 mt-2 flex items-center justify-between border-t border-border/50">
+                      <span className="text-xs font-medium text-muted-foreground">Status</span>
+                      <select
+                        className={`text-xs font-semibold rounded-full px-2.5 py-1 border outline-none bg-background cursor-pointer ${
+                          (item.status || "pending") === "pending"
+                            ? "text-amber-700 border-amber-200 bg-amber-50"
+                            : (item.status || "pending") === "replied"
+                              ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+                              : "text-blue-700 border-blue-200 bg-blue-50"
+                        }`}
+                        value={item.status || "pending"}
+                        onChange={(e) => updateStatus(item.id, e.target.value)}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="replied">Replied</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

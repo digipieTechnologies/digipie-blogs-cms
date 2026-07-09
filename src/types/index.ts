@@ -5,7 +5,7 @@ export interface Blog {
   excerpt: string;
   content: any;
   category: string | string[];
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'published';
   coverImage: string;
   author?: {
     name: string;
