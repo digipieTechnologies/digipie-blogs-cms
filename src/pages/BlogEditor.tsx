@@ -1891,7 +1891,6 @@ export function BlogEditor() {
         selectedText.startsWith("https://"))
     ) {
       setVideoUrl(selectedText);
-      // Auto-detect if it's not youtube
       if (
         !selectedText.includes("youtube.com") &&
         !selectedText.includes("youtu.be")
