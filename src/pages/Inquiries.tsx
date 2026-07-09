@@ -95,7 +95,8 @@ export function Inquiries() {
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       item.email.toLowerCase().includes(search.toLowerCase()) ||
       (item.phone && item.phone.includes(search)) ||
-      (item.service && item.service.toLowerCase().includes(search.toLowerCase())) ||
+      (item.service &&
+        item.service.toLowerCase().includes(search.toLowerCase())) ||
       item.message.toLowerCase().includes(search.toLowerCase()),
   );
 
