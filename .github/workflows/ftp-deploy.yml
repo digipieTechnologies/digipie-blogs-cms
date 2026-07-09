@@ -33,4 +33,4 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /cms/ # Deploying to the cms folder
+          server-dir: / # Deploying to the cms folder
