@@ -1300,7 +1300,7 @@ export function BlogEditor() {
 
     const isSupabaseConfigured = () => {
       const url = import.meta.env.VITE_SUPABASE_URL || "";
-      const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+      const key = import.meta.env.VITE_SUPABASE_PUBLISH_KEY || "";
       return (
         url &&
         !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
@@ -1795,7 +1795,7 @@ export function BlogEditor() {
       const isSupabaseConfigured =
         supabaseUrl &&
         !supabaseUrl.includes("YOUR_SUPABASE_PROJECT_URL") &&
-        (import.meta.env.VITE_SUPABASE_ANON_KEY || "");
+        (import.meta.env.VITE_SUPABASE_PUBLISH_KEY || "");
 
       if (isSupabaseConfigured) {
         try {
@@ -1944,7 +1944,7 @@ export function BlogEditor() {
     const isSupabaseConfigured =
       supabaseUrl &&
       !supabaseUrl.includes("YOUR_SUPABASE_PROJECT_URL") &&
-      (import.meta.env.VITE_SUPABASE_ANON_KEY || "");
+      (import.meta.env.VITE_SUPABASE_PUBLISH_KEY || "");
 
     if (isSupabaseConfigured) {
       try {
