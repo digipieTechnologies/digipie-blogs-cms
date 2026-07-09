@@ -12,6 +12,7 @@ interface Inquiry {
   name: string;
   email: string;
   phone: string;
+  service?: string;
   message: string;
   status: string;
   created_at: string;
@@ -94,6 +95,7 @@ export function Inquiries() {
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       item.email.toLowerCase().includes(search.toLowerCase()) ||
       (item.phone && item.phone.includes(search)) ||
+      (item.service && item.service.toLowerCase().includes(search.toLowerCase())) ||
       item.message.toLowerCase().includes(search.toLowerCase()),
   );
 
@@ -148,14 +150,22 @@ export function Inquiries() {
                       <th className="px-6 py-3 font-semibold">Date</th>
                       <th className="px-6 py-3 font-semibold">Name</th>
                       <th className="px-6 py-3 font-semibold">Contact Info</th>
-                      <th className="px-6 py-3 font-semibold w-1/3 min-w-[300px]">Message</th>
+                      <th className="px-6 py-3 font-semibold">Service</th>
+                      <th className="px-6 py-3 font-semibold w-1/3 min-w-[300px]">
+                        Message
+                      </th>
                       <th className="px-6 py-3 font-semibold">Status</th>
-                      <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                      <th className="px-6 py-3 font-semibold text-right">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
                     {filteredInquiries.map((item) => (
-                      <tr key={item.id} className="group hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={item.id}
+                        className="group hover:bg-muted/30 transition-colors"
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
                           {new Date(item.created_at).toLocaleString()}
                         </td>
@@ -164,7 +174,16 @@ export function Inquiries() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-foreground space-y-0.5">
                           <div className="font-medium">{item.email}</div>
-                          {item.phone && <div className="text-xs text-muted-foreground">{item.phone}</div>}
+                          {item.phone && (
+                            <div className="text-xs text-muted-foreground">
+                              {item.phone}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-foreground">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                            {item.service || "N/A"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-muted-foreground whitespace-pre-wrap leading-relaxed">
                           {item.message}
@@ -179,7 +198,9 @@ export function Inquiries() {
                                   : "text-blue-700 border-blue-200 bg-blue-50"
                             }`}
                             value={item.status || "pending"}
-                            onChange={(e) => updateStatus(item.id, e.target.value)}
+                            onChange={(e) =>
+                              updateStatus(item.id, e.target.value)
+                            }
                           >
                             <option value="pending">Pending</option>
                             <option value="in_progress">In Progress</option>
@@ -205,10 +226,15 @@ export function Inquiries() {
               {/* Mobile Card Layout */}
               <div className="md:hidden flex flex-col divide-y divide-border/50">
                 {filteredInquiries.map((item) => (
-                  <div key={item.id} className="p-4 space-y-4 hover:bg-muted/10 transition-colors">
+                  <div
+                    key={item.id}
+                    className="p-4 space-y-4 hover:bg-muted/10 transition-colors"
+                  >
                     <div className="flex justify-between items-start gap-2">
                       <div>
-                        <h4 className="font-semibold text-foreground">{item.name}</h4>
+                        <h4 className="font-semibold text-foreground">
+                          {item.name}
+                        </h4>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           {new Date(item.created_at).toLocaleString()}
                         </div>
@@ -222,10 +248,11 @@ export function Inquiries() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    
+
                     <div className="space-y-1.5 bg-muted/20 p-3 rounded-md border border-border/50">
                       <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground" /> {item.email}
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />{" "}
+                        {item.email}
                       </div>
                       {item.phone && (
                         <div className="text-xs text-muted-foreground pl-5.5">
@@ -239,7 +266,9 @@ export function Inquiries() {
                     </div>
 
                     <div className="pt-3 mt-2 flex items-center justify-between border-t border-border/50">
-                      <span className="text-xs font-medium text-muted-foreground">Status</span>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Status
+                      </span>
                       <select
                         className={`text-xs font-semibold rounded-full px-2.5 py-1 border outline-none bg-background cursor-pointer ${
                           (item.status || "pending") === "pending"
