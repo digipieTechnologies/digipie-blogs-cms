@@ -71,7 +71,7 @@ const saveLocalTags = (tags: Tag[]) => {
 
 const isSupabaseConfigured = () => {
   const url = import.meta.env.VITE_SUPABASE_URL || "";
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  const key = import.meta.env.VITE_SUPABASE_PUBLISH_KEY || "";
   return (
     url &&
     !url.includes("YOUR_SUPABASE_PROJECT_URL") &&
